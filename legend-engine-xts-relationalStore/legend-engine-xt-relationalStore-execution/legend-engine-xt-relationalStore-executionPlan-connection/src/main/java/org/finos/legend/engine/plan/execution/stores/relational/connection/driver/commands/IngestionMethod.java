@@ -17,5 +17,6 @@ package org.finos.legend.engine.plan.execution.stores.relational.connection.driv
 public enum IngestionMethod
 {
     BATCH_INSERT,
-    CLIENT_FILE
+    CLIENT_FILE,
+    DIRECT_INSERT
 }
