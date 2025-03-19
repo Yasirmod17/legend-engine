@@ -14,10 +14,15 @@
 
 package org.finos.legend.engine.plan.execution.stores.relational;
 
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.NumericNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import io.opentracing.Scope;
 import io.opentracing.util.GlobalTracer;
+import org.finos.legend.engine.plan.dependencies.domain.date.PureDate;
 import org.finos.legend.engine.plan.execution.result.StreamingResult;
 import org.finos.legend.engine.plan.execution.stores.relational.config.RelationalExecutionConfiguration;
 import org.finos.legend.engine.plan.execution.stores.relational.connection.driver.commands.Column;
@@ -33,7 +38,9 @@ import org.slf4j.Logger;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.text.SimpleDateFormat;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.stream.Collectors;
 
 public class StreamResultToTableVisitor implements RelationalDatabaseCommandsVisitor<Boolean>
@@ -155,18 +162,74 @@ public class StreamResultToTableVisitor implements RelationalDatabaseCommandsVis
             return "NULL";
         }
 
-        // TODO: Use ResultNormalizer to properly format values for SQL and mantain type integrity
-        //Object normalizedValue = ResultNormalizer.normalizeToSql(value, this.databaseTimeZone);
-        if (value instanceof TextNode && !((TextNode) value).canConvertToLong())
+        // Handle Jackson node types
+        if (value instanceof TextNode)
         {
-            return "\'" + ((TextNode) value).asText() + "\'";
+            return "\'" + ((TextNode) value).asText().replace("'", "\'").replace("\\", "\\\\") + "\'";
         }
+        else if (value instanceof NumericNode)
+        {
+            return ((NumericNode) value).asText();
+        }
+        else if (value instanceof BooleanNode)
+        {
+            return ((BooleanNode) value).asBoolean() ? "TRUE" : "FALSE";
+        }
+        else if (value instanceof NullNode)
+        {
+            return "NULL";
+        }
+        else if (value instanceof ArrayNode || value instanceof ObjectNode)
+        {
+            return "\'" + value.toString().replace("'", "\'").replace("\\", "\\\\") + "\'";
+        }
+        
+        // Handle date types
+        else if (value instanceof PureDate)
+        {
+            PureDate pureDate = (PureDate) value;
+            if (pureDate.hasSubsecond())
+            {
+                return "\'" + pureDate.format("[" + this.databaseTimeZone + "]yyyy-MM-dd HH:mm:ss.SSSSSS") + "\'";
+            }
+            if (pureDate.hasSecond())
+            {
+                return "\'" + pureDate.format("[" + this.databaseTimeZone + "]yyyy-MM-dd HH:mm:ss") + "\'";
+            }
+            return "\'" + pureDate.format("[" + this.databaseTimeZone + "]yyyy-MM-dd") + "\'";
+        }
+        else if (value instanceof java.sql.Date)
+        {
+            return "\'" + value.toString() + "\'";
+        }
+        else if (value instanceof java.sql.Timestamp)
+        {
+            return "\'" + value.toString() + "\'";
+        }
+        else if (value instanceof java.util.Date)
+        {
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            sdf.setTimeZone(TimeZone.getTimeZone(this.databaseTimeZone));
+            return "\'" + sdf.format((java.util.Date) value) + "\'";
+        }
+        
+        // Handle string type
+        else if (value instanceof String)
+        {
+            return "\'" + ((String) value).replace("'", "\'").replace("\\", "\\\\") + "\'";
+        }
+        
+        // Handle primitive types
+        else if (value instanceof Number || value instanceof Boolean)
+        {
+            return value.toString();
+        }
+        
+        // For any other type, convert to string and quote it
         else
         {
-            value.toString();
+            return "\'" + value.toString().replace("'", "\'").replace("\\", "\\\\") + "\'";
         }
-        throw new UnsupportedOperationException("Unsupported Type" + value.getClass().getName());
-
     }
 
     private static boolean checkedExecute(Statement statement, String sql)
