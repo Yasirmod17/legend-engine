@@ -1605,6 +1605,42 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
   )
 }
 
+function <<test.Test>> meta::external::query::sql::transformation::queryToPure::tests::testHavingOnAutoRealisedField():Boolean[1]
+{
+  test(
+    'SELECT String, Sum FROM (select sum(Integer) as "Sum", s1.String from service(\'/service/service1\') s1 join service(\'/service/service3\') s2 on s1.String = s2.ID where s1.String = \'abc\' group by s1.String having sum(s1.Integer) != 0)',
+
+    [
+      c({|
+        let const_s2 = 123;
+        meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+          ->project(~[Boolean:x|$x.booleanIn,Integer:x|$x.integerIn,Float:x|$x.floatIn,Decimal:x|$x.decimalIn,StrictDate:x|$x.strictDateIn,DateTime:x|$x.dateTimeIn,String:x|$x.stringIn])
+          ->rename(~Boolean, ~Boolean_s1)
+          ->rename(~Integer, ~Integer_s1)
+          ->rename(~Float, ~Float_s1)
+          ->rename(~Decimal, ~Decimal_s1)
+          ->rename(~StrictDate, ~StrictDate_s1)
+          ->rename(~DateTime, ~DateTime_s1)
+          ->rename(~String, ~String_s1)
+          ->join(meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+                  ->project(~[ID:x|$x.idIn,Integer:x|$x.integerIn,'The Enum Value':x|$x.enumVal,'The Type':x|$x.type,Const:x|$const_s2])
+                  ->rename(~ID, ~ID_s2)->rename(~Integer, ~Integer_s2)
+                  ->rename(~'The Enum Value', ~'The Enum Value_s2')
+                  ->rename(~'The Type', ~'The Type_s2')
+                  ->rename(~Const, ~Const_s2),
+                meta::pure::functions::relation::JoinKind.INNER,
+                {row1, row2 |$row1.String_s1 == $row2.ID_s2})
+          ->filter(x|$x.String_s1 == 'abc')
+          ->groupBy(~[String_s1], ~[Sum:x|$x.Integer_s1:y: Integer[*]|$y->sum()])
+          ->filter(x|not($x.Sum == 0))
+          ->select(~[Sum,String_s1])
+          ->rename(~String_s1, ~String)
+          ->select(~[String,Sum]);
+      }, true, false)
+    ]
+  )
+}
+
 //CAST
 function <<test.Test>> meta::external::query::sql::transformation::queryToPure::tests::testCasts():Boolean[1]
 {
@@ -2400,6 +2436,62 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
             String : x|$x.String,
             abc : x|$x.String
           ])
+      }
+    ]
+  )
+}
+
+function <<test.Test>> meta::external::query::sql::transformation::queryToPure::tests::testCrossJoinWithinSetOperationUnion():Boolean[1]
+{
+  test(
+    'select String ' +
+    'from service(\'/service/service1\') s1 inner join (' +
+    '    select 1 as col from service(\'/service/service1\') a, service(\'/service/service1\') b ' +
+    '    union all ' +
+    '    select 2 as col from service(\'/service/service1\') b ' +
+    ') scope on scope.col = s1.String',
+
+    [
+      {|meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+        ->project(~[Boolean:x|$x.booleanIn,Integer:x|$x.integerIn,Float:x|$x.floatIn,Decimal:x|$x.decimalIn,StrictDate:x|$x.strictDateIn,DateTime:x|$x.dateTimeIn,String:x|$x.stringIn])
+        ->rename(~Boolean, ~Boolean_s1)
+        ->rename(~Integer, ~Integer_s1)
+        ->rename(~Float, ~Float_s1)
+        ->rename(~Decimal, ~Decimal_s1)
+        ->rename(~StrictDate, ~StrictDate_s1)
+        ->rename(~DateTime, ~DateTime_s1)
+        ->rename(~String, ~String_s1)
+        ->join(meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+              ->project(~[Boolean:x|$x.booleanIn,Integer:x|$x.integerIn,Float:x|$x.floatIn,Decimal:x|$x.decimalIn,StrictDate:x|$x.strictDateIn,DateTime:x|$x.dateTimeIn,String:x|$x.stringIn])
+              ->rename(~Boolean, ~Boolean_a)
+              ->rename(~Integer, ~Integer_a)
+              ->rename(~Float, ~Float_a)
+              ->rename(~Decimal, ~Decimal_a)
+              ->rename(~StrictDate, ~StrictDate_a)
+              ->rename(~DateTime, ~DateTime_a)
+              ->rename(~String, ~String_a)
+              ->join(meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+                          ->project(~[Boolean:x|$x.booleanIn,Integer:x|$x.integerIn,Float:x|$x.floatIn,Decimal:x|$x.decimalIn,StrictDate:x|$x.strictDateIn,DateTime:x|$x.dateTimeIn,String:x|$x.stringIn])
+                          ->rename(~Boolean, ~Boolean_b)
+                          ->rename(~Integer, ~Integer_b)
+                          ->rename(~Float, ~Float_b)
+                          ->rename(~Decimal, ~Decimal_b)
+                          ->rename(~StrictDate, ~StrictDate_b)
+                          ->rename(~DateTime, ~DateTime_b)
+                          ->rename(~String, ~String_b),
+                      meta::pure::functions::relation::JoinKind.INNER,
+                      {row1, row2|true}
+              )
+              ->project(~[col:x|1])
+              ->concatenate(meta::external::query::sql::transformation::queryToPure::tests::FlatInput.all()
+                ->project(~[Boolean:x|$x.booleanIn,Integer:x|$x.integerIn,Float:x|$x.floatIn,Decimal:x|$x.decimalIn,StrictDate:x|$x.strictDateIn,DateTime:x|$x.dateTimeIn,String:x|$x.stringIn])
+                ->project(~[col:x|2]))
+                ->rename(~col, ~col_scope),
+            meta::pure::functions::relation::JoinKind.INNER,
+            {row1, row2|$row2.col_scope == $row1.String_s1}
+        )
+        ->select(~[String_s1])
+        ->rename(~String_s1, ~String)
       }
     ]
   )
@@ -3230,6 +3322,7 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
     'sum(Integer) OVER (Partition By String ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as "ROWS_UNBOUNDED_PRECEDING_UNBOUNDED_PROCEDING", ' +
     'sum(Integer) OVER (Partition By String ROWS BETWEEN 1 FOLLOWING AND 1 FOLLOWING) as "ROWS_1_FOLLOWING_1_FOLLOWING", ' +
     'sum(Integer) OVER (Partition By String ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) as "ROWS_UNBOUNDED_PRECEDING_CURRENT", ' +
+    'sum(Integer) OVER (Partition By String ROWS UNBOUNDED PRECEDING) as "ROWS_UNBOUNDED_PRECEDING", ' +
 
     'sum(Integer) OVER (Partition By String ORDER BY Integer ASC RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) as "RANGE_CURRENT_UNBOUNDED_FOLLOWING", ' +
     'sum(Integer) OVER (Partition By String ORDER BY Integer ASC RANGE BETWEEN 1 FOLLOWING AND UNBOUNDED FOLLOWING) as "RANGE_1_FOLLOWING_UNBOUNDED_FOLLOWING", ' +
@@ -3253,6 +3346,7 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
               ->extend(over(~[String], [], rows(meta::pure::functions::relation::unbounded(), meta::pure::functions::relation::unbounded())), ~[ROWS_UNBOUNDED_PRECEDING_UNBOUNDED_PROCEDING:{p,w,r|$r.Integer}:y|$y->sum()])
               ->extend(over(~[String], [], rows(1, 1)), ~[ROWS_1_FOLLOWING_1_FOLLOWING:{p,w,r|$r.Integer}:y|$y->sum()])
               ->extend(over(~[String], [], rows(meta::pure::functions::relation::unbounded(), 0)), ~[ROWS_UNBOUNDED_PRECEDING_CURRENT:{p,w,r|$r.Integer}:y|$y->sum()])
+              ->extend(over(~[String], [], rows(meta::pure::functions::relation::unbounded(), 0)), ~[ROWS_UNBOUNDED_PRECEDING:{p,w,r|$r.Integer}:y|$y->sum()])
 
               ->extend(over(~[String], [~Integer->ascending()], _range(0, meta::pure::functions::relation::unbounded())), ~[RANGE_CURRENT_UNBOUNDED_FOLLOWING:{p,w,r|$r.Integer}:y|$y->sum()])
               ->extend(over(~[String], [~Integer->ascending()], _range(1, meta::pure::functions::relation::unbounded())), ~[RANGE_1_FOLLOWING_UNBOUNDED_FOLLOWING:{p,w,r|$r.Integer}:y|$y->sum()])
@@ -3263,7 +3357,7 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
               ->extend(over([~Integer->ascending()], _range(meta::pure::functions::relation::unbounded(), 0)), ~[RANGE_UNBOUNDED_PRECEDING_CURRENT_NO_PARTITION:{p,w,r|$r.Integer}:y|$y->sum()])
               ->extend(over([~Integer->ascending()]), ~[NO_PARTITION_NO_FRAME:{p,w,r|$r.Integer}:y|$y->sum()])
 
-              ->select(~[ROWS_CURRENT_UNBOUNDED_FOLLOWING, ROWS_1_FOLLOWING_UNBOUNDED_FOLLOWING, ROWS_1_PRECEDING_UNBOUNDED_FOLLOWING, ROWS_UNBOUNDED_PRECEDING_UNBOUNDED_PROCEDING, ROWS_1_FOLLOWING_1_FOLLOWING, ROWS_UNBOUNDED_PRECEDING_CURRENT,
+              ->select(~[ROWS_CURRENT_UNBOUNDED_FOLLOWING, ROWS_1_FOLLOWING_UNBOUNDED_FOLLOWING, ROWS_1_PRECEDING_UNBOUNDED_FOLLOWING, ROWS_UNBOUNDED_PRECEDING_UNBOUNDED_PROCEDING, ROWS_1_FOLLOWING_1_FOLLOWING, ROWS_UNBOUNDED_PRECEDING_CURRENT, ROWS_UNBOUNDED_PRECEDING,
                         RANGE_CURRENT_UNBOUNDED_FOLLOWING, RANGE_1_FOLLOWING_UNBOUNDED_FOLLOWING, RANGE_1_PRECEDING_UNBOUNDED_FOLLOWING, RANGE_UNBOUNDED_PRECEDING_UNBOUNDED_PROCEDING, RANGE_1_FOLLOWING_1_FOLLOWING, RANGE_UNBOUNDED_PRECEDING_CURRENT,
                         RANGE_UNBOUNDED_PRECEDING_CURRENT_NO_PARTITION, NO_PARTITION_NO_FRAME
                       ])
@@ -3662,11 +3756,11 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
     ],
 
     [
-      {id_1:String[1], ints_1:Integer[*], date_1:StrictDate[0..1]|
+      {id_union_1:String[1], ints_union_1:Integer[*], date_union_1:StrictDate[0..1]|
 
-        let const_3 = 123;
+        let const_union_3 = 123;
 
-        FlatInput.all()->filter(f | $f.idIn == $id_1 && $f.integerIn->in($ints_1) && ($f.strictDateIn > $date_1))->project(
+        FlatInput.all()->filter(f | $f.idIn == $id_union_1 && $f.integerIn->in($ints_union_1) && ($f.strictDateIn > $date_union_1))->project(
           [
             x | $x.idIn, x | $x.integerIn, x | $x.enumVal
           ],
@@ -3675,7 +3769,7 @@ function <<test.Test>> meta::external::query::sql::transformation::queryToPure::
           ]
         )->concatenate(FlatInput.all()->project(
           [
-            x | $x.idIn, x | $x.integerIn, x | $x.enumVal, x | $x.type, x | $const_3
+            x | $x.idIn, x | $x.integerIn, x | $x.enumVal, x | $x.type, x | $const_union_3
           ],
           [
             'ID', 'Integer', 'The Enum Value', 'The Type', 'Const'
