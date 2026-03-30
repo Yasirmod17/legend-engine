@@ -1,4 +1,4 @@
-// Copyright 2023 Goldman Sachs
+// Copyright 2026 Goldman Sachs
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-Class meta::protocols::pure::v1_32_0::metamodel::store::relational::connection::alloy::specification::AthenaDatasourceSpecification extends meta::protocols::pure::v1_32_0::metamodel::store::relational::connection::alloy::specification::DatasourceSpecification
+package org.finos.legend.engine.protocol.dataquality.metamodel;
+
+public class MD5HashStrategy extends ReconStrategy
 {
-   awsRegion: String[1];
-   s3OutputLocation: String[1];
-   databaseName: String[1];
+    public String sourceHashColumn;
+    public String targetHashColumn;
+    public Boolean aggregatedHash;
 }

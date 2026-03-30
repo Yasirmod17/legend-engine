@@ -1,4 +1,4 @@
-// Copyright 2021 Goldman Sachs
+// Copyright 2026 Goldman Sachs
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-Class meta::protocols::pure::v1_29_0::metamodel::store::relational::connection::alloy::specification::AthenaDatasourceSpecification extends meta::protocols::pure::v1_29_0::metamodel::store::relational::connection::alloy::specification::DatasourceSpecification
+package org.finos.legend.engine.shared.mongo.model;
+
+/**
+ * Interface for content stored with versioning and audit information.
+ * @param <I> The ID type
+ */
+public interface StoredVersionedAssetContent<I>
 {
-   awsRegion: String[1];
-   s3OutputLocation: String[1];
-   databaseName: String[1];
+    I getId();
+
+    StoredAuditInformation getAudit();
+
+    void setAudit(StoredAuditInformation audit);
 }
