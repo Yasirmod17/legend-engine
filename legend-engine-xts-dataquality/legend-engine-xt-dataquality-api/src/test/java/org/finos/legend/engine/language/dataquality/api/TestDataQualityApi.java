@@ -34,6 +34,8 @@ import org.finos.legend.engine.plan.generation.transformers.LegendPlanTransforme
 import org.finos.legend.engine.protocol.dataquality.metamodel.RelationValidation;
 import org.finos.legend.engine.protocol.pure.PureClientVersions;
 import org.finos.legend.engine.protocol.pure.m3.function.LambdaFunction;
+import org.finos.legend.engine.protocol.pure.m3.valuespecification.constant.datatype.primitive.CString;
+import org.finos.legend.engine.protocol.pure.v1.model.packageableElement.domain.ParameterValue;
 import org.finos.legend.engine.protocol.pure.v1.model.context.PureModelContextData;
 import org.finos.legend.engine.protocol.pure.dsl.graph.valuespecification.constant.classInstance.RootGraphFetchTree;
 import org.finos.legend.engine.protocol.pure.v1.model.context.PureModelContextPointer;
@@ -50,6 +52,7 @@ import org.glassfish.jersey.test.grizzly.GrizzlyWebTestContainerFactory;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -174,9 +177,111 @@ public class TestDataQualityApi
         assertNotNull(resultAsString);
     }
 
+    @Test
+    public void testDataQualityRecon_withPrefixedLambdaParametersAndTwoTargetParameters()
+    {
+        DataQualityReconInput input = new DataQualityReconInput();
+        input.clientVersion = "vX_X_X";
+        input.model = new PureModelContextPointer();
+        input.source = lambda("{nameFilter:String[1]|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])->filter(x|$x.fullName == $nameFilter)->from(demo::PersonMap, demo::PersonRuntime)}");
+        input.target = lambda("{nameFilter:String[1], businessDate:String[1]|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])->filter(x|$x.fullName == $nameFilter)->from(demo::PersonMap, demo::PersonRuntime)}");
+        input.keys = Collections.singleton("id");
+        input.colsForHash = Collections.singleton("fullName");
+        input.sourceLambdaParameterValues = Collections.singletonList(createParameterValue("nameFilter", new CString("Alice")));
+        input.targetLambdaParameterValues = FastList.newListWith(
+            createParameterValue("nameFilter", new CString("Alice")),
+            createParameterValue("businessDate", new CString("2026-04-13"))
+        );
+
+        Response response = resources.target("pure/v1/dataquality/reconciliation")
+                .request()
+                .post(Entity.json(input));
+
+        assertEquals(200, response.getStatus());
+        String resultAsString = response.readEntity(String.class);
+        assertNotNull(resultAsString);
+    }
+
+    @Test
+    public void testDataQualityReconThrowsExceptionWhenSourceDoesNotHaveFrom()
+    {
+        DataQualityReconInput input = new DataQualityReconInput();
+        input.clientVersion = "vX_X_X";
+        input.model = new PureModelContextPointer();
+        input.source = lambda("|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])");
+        input.target = lambda("|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])->from(demo::PersonMap, demo::PersonRuntime)");
+
+        Response response = resources.target("pure/v1/dataquality/reconciliation")
+                .request()
+                .post(Entity.json(input));
+
+        assertEquals(500, response.getStatus());
+        String resultAsString = response.readEntity(String.class);
+        assertTrue(resultAsString.contains("The source query for the Data Quality Recon Input does not end with a 'from' so unable to execute it."));
+    }
+
+    @Test
+    public void testDataQualityReconThrowsExceptionWhenTargetDoesNotHaveFrom()
+    {
+        DataQualityReconInput input = new DataQualityReconInput();
+        input.clientVersion = "vX_X_X";
+        input.model = new PureModelContextPointer();
+        input.source = lambda("|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])->from(demo::PersonMap, demo::PersonRuntime)");
+        input.target = lambda("|demo::Person.all()->project(~[id: x|$x.id, fullName: x|$x.fullName])");
+
+        Response response = resources.target("pure/v1/dataquality/reconciliation")
+                .request()
+                .post(Entity.json(input));
+
+        assertEquals(500, response.getStatus());
+        String resultAsString = response.readEntity(String.class);
+        assertTrue(resultAsString.contains("The target query for the Data Quality Recon Input does not end with a 'from' so unable to execute it."));
+    }
+
+    @Test
+    public void testDataQualityReconThrowsExceptionWhenPackagePathNotPointingToComparisonElement()
+    {
+        DataQualityReconInput input = new DataQualityReconInput();
+        input.clientVersion = "vX_X_X";
+        input.model = new PureModelContextPointer();
+        input.packagePath = "demo::PersonRuntime";
+
+        Response response = resources.target("pure/v1/dataquality/reconciliation")
+                .request()
+                .post(Entity.json(input));
+
+        assertEquals(500, response.getStatus());
+        String resultAsString = response.readEntity(String.class);
+        assertTrue(resultAsString.contains("Expected package path to point to DataQualityRelationComparison but found Root_meta_pure_runtime_PackageableRuntime_Impl"));
+    }
+
+    @Test
+    public void testDataQualityReconWhenProvidePackagePathToComparisonElement()
+    {
+        DataQualityReconInput input = new DataQualityReconInput();
+        input.packagePath = "meta::dataquality::TestRelationComparison";
+        input.model = new PureModelContextPointer();
+
+        Response response = resources.target("pure/v1/dataquality/reconciliation")
+                .request()
+                .post(Entity.json(input));
+
+        assertEquals(200, response.getStatus());
+        String resultAsString = response.readEntity(String.class);
+        assertNotNull(resultAsString);
+    }
+
     private LambdaFunction lambda(String code)
     {
         return PureGrammarParser.newInstance().parseLambda(code, "", false);
+    }
+
+    private ParameterValue createParameterValue(String name, CString value)
+    {
+        ParameterValue parameterValue = new ParameterValue();
+        parameterValue.name = name;
+        parameterValue.value = value;
+        return parameterValue;
     }
 
 

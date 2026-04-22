@@ -5655,7 +5655,11 @@ function meta::relational::functions::pureToSqlQuery::processExists(
                     savedFilteringOperation = [],
                     filteringOperation = $filterResultSelect.filteringOperation->concatenate($savedFilterExpressions)->andFilters($extensions)
                 )),
-              | ^$filterResultCursor(select = ^$filterResultSelect(savedFilteringOperation = [], columns = $savedFilterExpressions))
+              | let existsColumns = if($savedFilterExpressions->isNotEmpty(),
+                    |$savedFilterExpressions,
+                    |$filterResultSelect.filteringOperation
+                );
+                ^$filterResultCursor(select = ^$filterResultSelect(savedFilteringOperation = [], filteringOperation = [], columns = $existsColumns));
           );,
         | if ($originalTreeNode.childrenData->size() == 1 && $leftSideCursor->shouldBuildExistsPredicate(),
               | buildExistsPredicate($leftSideCursor, $expression, $negate, $leftSidePropertyMappings,
