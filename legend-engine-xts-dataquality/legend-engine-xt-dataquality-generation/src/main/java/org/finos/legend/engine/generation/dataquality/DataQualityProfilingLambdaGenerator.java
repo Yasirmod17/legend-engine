@@ -14,20 +14,26 @@
 
 package org.finos.legend.engine.generation.dataquality;
 
+import org.finos.legend.engine.language.pure.compiler.toPureGraph.HelperValueSpecificationBuilder;
 import org.finos.legend.engine.language.pure.compiler.toPureGraph.PureModel;
+import org.finos.legend.engine.language.pure.grammar.from.PureGrammarParser;
 import org.finos.legend.engine.shared.core.operational.errorManagement.EngineException;
 import org.finos.legend.engine.shared.core.operational.errorManagement.ExceptionCategory;
+import org.finos.legend.pure.generated.PureCompiledLambda;
 import org.finos.legend.pure.generated.Root_meta_external_dataquality_DataQualityRelationValidation;
 import org.finos.legend.pure.generated.core_dataquality_generation_dataprofile;
 import org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.PackageableElement;
+import org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction;
+import org.finos.legend.pure.m3.execution.ExecutionSupport;
+import org.finos.legend.pure.runtime.java.compiled.generation.processors.support.function.DefaultPureLambdaFunction1;
 
 public class DataQualityProfilingLambdaGenerator
 {
 
-    public static org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object> generateLambda(PureModel pureModel, String qualifiedPath)
+    public static org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object> generateLambda(PureModel pureModel, String qualifiedPath, boolean excludePlatformColumns)
     {
         Root_meta_external_dataquality_DataQualityRelationValidation validation = getDataQualityRelationValidation(pureModel, qualifiedPath);
-        return generateDataProfileLambda(pureModel, validation);
+        return generateDataProfileLambda(pureModel, validation, excludePlatformColumns);
     }
 
     public static Root_meta_external_dataquality_DataQualityRelationValidation getDataQualityRelationValidation(PureModel pureModel, String qualifiedPath)
@@ -40,8 +46,21 @@ public class DataQualityProfilingLambdaGenerator
         throw new EngineException("The element at path '" + qualifiedPath + "' is not a DataQualityRelationValidation!", ExceptionCategory.USER_EXECUTION_ERROR);
     }
 
-    private static org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object> generateDataProfileLambda(PureModel pureModel, Root_meta_external_dataquality_DataQualityRelationValidation packageableElement)
+    private static org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object> generateDataProfileLambda(PureModel pureModel, Root_meta_external_dataquality_DataQualityRelationValidation packageableElement, boolean excludePlatformColumns)
     {
-        return (org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object>) core_dataquality_generation_dataprofile.Root_meta_external_dataquality_dataprofile_getProfilingLambda_DataQualityRelationValidation_1__Boolean_1__LambdaFunction_1_(packageableElement, true,  pureModel.getExecutionSupport());
+        return (org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<Object>) core_dataquality_generation_dataprofile.Root_meta_external_dataquality_dataprofile_getProfilingLambda_DataQualityRelationValidation_1__Boolean_1__Boolean_1__Function_1__LambdaFunction_1_(packageableElement, true, excludePlatformColumns, getLambdaCompiler(pureModel), pureModel.getExecutionSupport());
+    }
+
+    public static org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.Function<?> getLambdaCompiler(PureModel pureModel)
+    {
+        PureCompiledLambda stringLambdaCompiler = new PureCompiledLambda(pureModel.getExecutionSupport(), "", new DefaultPureLambdaFunction1<String, LambdaFunction<? extends Object>>()
+        {
+            @Override
+            public org.finos.legend.pure.m3.coreinstance.meta.pure.metamodel.function.LambdaFunction<? extends Object> value(String code, ExecutionSupport executionSupport)
+            {
+                return HelperValueSpecificationBuilder.buildLambda(PureGrammarParser.newInstance().parseLambda(code), pureModel.getContext());
+            }
+        });
+        return core_dataquality_generation_dataprofile.Root_meta_external_dataquality_dataprofile_getLambdaCompiler_Function_1__Function_1_(stringLambdaCompiler, pureModel.getExecutionSupport());
     }
 }

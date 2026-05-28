@@ -5032,7 +5032,13 @@ function meta::relational::functions::pureToSqlQuery::processGetAll(expression: 
 
 function meta::relational::functions::pureToSqlQuery::processRelationFunctionClassMapping(r:RelationFunctionInstanceSetImplementation[1], vars:Map<VariableExpression, ValueSpecification>[1], state:State[1], milestoningContext:TemporalMilestoningContext[0..1], joinType:JoinType[1], nodeId:String[1], context:DebugContext[1], extensions:Extension[*]):SelectWithCursor[1]
 {
-  let routedRelationFunction = $r->potentiallyRouteRelationFunctionSet($state.mapping->toOne(), $extensions)->cast(@RelationFunctionInstanceSetImplementation).relationFunction;
+  // Auto-infer PK iff explicit ~primaryKey wasn't set at compile time.
+  let resolved = if($r.primaryKey->isEmpty(),
+    | let pkCols = $r->meta::relational::mapping::resolveRelationFunctionPrimaryKey([], $extensions);
+      ^$r(primaryKey = $pkCols);,
+    | $r
+  );
+  let routedRelationFunction = $resolved->potentiallyRouteRelationFunctionSet($state.mapping->toOne(), $extensions)->cast(@RelationFunctionInstanceSetImplementation).relationFunction;
   let relationExpression = $routedRelationFunction.expressionSequence->evaluateAndDeactivate()->at(0)->cast(@ClusteredValueSpecification).val;
   let newCursor = ^SelectWithCursor(select=^SelectSQLQuery(), milestoningContext=$milestoningContext);
   let newState = defaultState($state.mapping, $state.inScopeVars, $state.idToClassMapping);
@@ -8393,9 +8399,12 @@ function meta::relational::functions::pureToSqlQuery::enumToStoreValue(enumWrapp
 {
     let enum = $enumWrapper->cast(@Literal).value;
     let expr = $enumPropWrapper->byPassRouterInfo()->cast(@SimpleFunctionExpression);
-    let enumPropMapping = $currentPropertyMapping->at(0)->cast(@RelationalPropertyMapping);
+    let enumPropMapping = if($currentPropertyMapping->isNotEmpty(),
+                            |$currentPropertyMapping->at(0)->cast(@RelationalPropertyMapping),
+                            |[]
+                          );
 
-    if ($expr.func.name == 'getEnum',
+    if ($enumPropMapping->isEmpty() || $expr.func.name == 'getEnum',
           | [],
           | $expr.func->match([
                               p:Property<Nil,Any|*>[1]|assertEquals($enumPropMapping.property, $p, 'The mapping must be for the enum property'),
@@ -8408,8 +8417,10 @@ function meta::relational::functions::pureToSqlQuery::enumToStoreValue(enumWrapp
                             ]);
     );
 
-    let sourceVal = if ($enumPropMapping->instanceOf(SemiStructuredRelationalPropertyMapping),
-                        | $enum->id(),
+    let sourceVal = if ([
+                          pair(|$enumPropMapping->isEmpty(), |$enum->id()->toString()),
+                          pair(|$enumPropMapping->toOne()->instanceOf(SemiStructuredRelationalPropertyMapping), |$enum->id())
+                        ],
                         | assert($enumPropMapping.transformer->isNotEmpty(), | 'Missing an EnumerationMapping for the enum property \'' + $enumPropMapping.property.name->toOne() + '\'. Enum properties require an EnumerationMapping in order to transform the store values into the Enum.');
                           $enumPropMapping.transformer->toOne()->cast(@EnumerationMapping<Any> )->toSourceValues($enum);
                     );
@@ -8451,11 +8462,9 @@ function <<access.private>> meta::relational::functions::pureToSqlQuery::extract
     print(if(!$context.debug, |'',
             | $context.space+ '  Extract Enum Value ('+$enumeration->cast(@Enumeration<Any>)->elementToPath()+'.'+$enumAsString->toString()+')\n'));
 
-
     let enum = extractEnumValue($enumeration->cast(@Enumeration<Any>), $enumAsString->cast(@String))->cast(@Enum);
 
-   mapEnumValue($enum, $currentPropertyMapping, $context);
-
+    mapEnumValue($enum, $currentPropertyMapping, $context);
 }
 
 function <<access.private>> meta::relational::functions::pureToSqlQuery::mapEnumValue(
@@ -9762,6 +9771,7 @@ function meta::relational::functions::pureToSqlQuery::genericTypeToDataType(gene
             pair(|$path == 'Map' && $genericType.typeArguments->at(0).rawType == String, |^meta::relational::metamodel::datatype::Object(keyType = $genericType.typeArguments->at(0)->genericTypeToDataType(ZeroOne), valueType = $genericType.typeArguments->at(1)->genericTypeToDataType(ZeroOne))),
             pair(|$path == 'Pair' && $genericType.typeArguments->at(0).rawType == String, |^meta::relational::metamodel::datatype::Object(keyType = $genericType.typeArguments->at(0)->genericTypeToDataType(ZeroOne), valueType = $genericType.typeArguments->at(1)->genericTypeToDataType(ZeroOne))),
             pair(|$path == 'Variant' || ($path->in(['Map', 'Pair', 'List', 'Any'])->not() && $genericType.rawType->toOne()->instanceOf(Class)), |^meta::relational::metamodel::datatype::SemiStructured()),
+            pair(|$genericType.rawType->toOne()->instanceOf(Enumeration), |^meta::relational::metamodel::datatype::Varchar(size=1024)),
 
             pair(|$path == 'BigInt', |^meta::relational::metamodel::datatype::BigInt()),
             pair(|$path == 'StrictDate', |^meta::relational::metamodel::datatype::Date()),
@@ -10239,6 +10249,8 @@ function meta::relational::functions::pureToSqlQuery::getSupportedFunctions():Ma
         ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::date::previousDayOfWeek_Date_1__DayOfWeek_1__Date_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
         ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::date::dayOfMonth_Date_1__Integer_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
         ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::date::convertTimeZone_DateTime_1__String_1__String_1__String_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
+        ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::date::formatDate_DateTime_1__DateTimeFormat_1__String_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
+        ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::date::formatDate_StrictDate_1__StrictDateFormat_1__String_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
 
         ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::string::ascii_String_1__Integer_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
         ^PureFunctionToRelationalFunctionPair(first=meta::pure::functions::string::char_Integer_1__String_1_,second=meta::relational::functions::pureToSqlQuery::processDynaFunction_FunctionExpression_1__PropertyMapping_MANY__SelectWithCursor_1__Map_1__State_1__JoinType_1__String_1__List_1__DebugContext_1__Extension_MANY__RelationalOperationElement_1_),
