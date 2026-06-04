@@ -18,7 +18,7 @@
     <parent>
         <groupId>org.finos.legend.engine</groupId>
         <artifactId>legend-engine</artifactId>
-        <version>4.129.9-SNAPSHOT</version>
+        <version>4.130.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -32,5 +32,6 @@
         <module>legend-engine-extensions-collection-generation</module>
         <module>legend-engine-server</module>
         <module>legend-engine-repl</module>
+        <module>legend-engine-emit-tests</module>
     </modules>
 </project>
