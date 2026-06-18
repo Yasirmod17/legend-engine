@@ -91,18 +91,25 @@ jobs:
         env:
           MAVEN_OPTS: -Xmx36g
 
-      - name: Store build output artifacts
+      - name: Upload build output
         uses: actions/upload-artifact@v7
         with:
           name: build-output
-          # upload the target directory as it is the output of the build
-          # upload also the m2 repo to store the state of the install step
           path: |
             ~/**/target/
-            ~/.m2/repository/org/finos/legend/engine/
+            !~/**/target/*.jar
           retention-days: 1
           overwrite: true
           include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Upload m2 repository
+        uses: actions/upload-artifact@v7
+        with:
+          name: m2-repo
+          path: ~/.m2/repository/org/finos/legend/engine/
+          retention-days: 1
+          overwrite: true
           if-no-files-found: error
 
       - name: Set Test Matrix
@@ -196,11 +203,14 @@ jobs:
       - test-modules
     steps:
 
-      - name: Restore build output artifacts
-        uses: actions/download-artifact@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download m2 repository for publishing
+        uses: actions/download-artifact@v8
         with:
-          name: build-output
-          path: ~/
+          name: m2-repo
+          path: ~/.m2/repository/org/finos/legend/engine
 
       - name: Create bundle to publish
         working-directory: target/checkout

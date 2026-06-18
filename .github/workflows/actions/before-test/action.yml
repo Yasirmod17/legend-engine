@@ -65,11 +65,17 @@ runs:
         git config --global author.email "${GITHUB_ACTOR}@users.noreply.github.com"
         git config --global author.name "${GITHUB_ACTOR}"
 
-    - name: Restore build output artifacts
+    - name: Download build output
       uses: actions/download-artifact@v8
       with:
         name: build-output
         path: ~/
+
+    - name: Download m2 repository
+      uses: actions/download-artifact@v8
+      with:
+        name: m2-repo
+        path: ~/.m2/repository/org/finos/legend/engine
 
     - name: Collect Workflow Telemetry
       uses: runforesight/workflow-telemetry-action@v1
