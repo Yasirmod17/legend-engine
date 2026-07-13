@@ -52,7 +52,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: "zulu"
-          java-version: "11"
+          java-version: 17
           server-id: central
           server-username: CI_DEPLOY_USERNAME
           server-password: CI_DEPLOY_PASSWORD
@@ -73,20 +73,35 @@ jobs:
           developmentVersion="${a[0]}.${a[1]}.${nextPatch}-SNAPSHOT"
           echo "DEVELOPMENT_VERSION=${developmentVersion}" >> $GITHUB_ENV
 
+      - name: Cache Maven dependencies
+        uses: actions/cache@v5
+        env:
+          cache-name: cache-mvn-deps
+        with:
+          path: ~/.m2/repository
+          # Keep the restore-keys list narrow on purpose.
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+
+      - name: Download deps and plugins
+        run: mvn de.qaware.maven:go-offline-maven-plugin:resolve-dependencies
+
       - name: Prepare release
         run: mvn -B -e release:prepare -Darguments='-B -e' -DpreparationGoals=clean -DreleaseVersion=${{ github.event.inputs.releaseVersion }} -DdevelopmentVersion=${{ env.DEVELOPMENT_VERSION }} -P release
 
       - name: Checkout Release Tag
         uses: actions/checkout@v6
         with:
-          path: 'target/checkout'
           ref: ${{ github.event.repository.name }}-${{ github.event.inputs.releaseVersion }}
           token: ${{ secrets.FINOS_GITHUB_TOKEN }}
           fetch-depth: 1
           persist-credentials: true
 
+      - name: Purge stale legend-engine artifacts from local Maven repo
+        run: rm -rf ~/.m2/repository/org/finos/legend/engine
+
       - name: Build Release Tag
-        working-directory: target/checkout
         run: mvn -B -e -T5 -DskipTests -Dorg.slf4j.simpleLogger.showThreadName=true install -P release,docker,pct-cloud-test
         env:
           MAVEN_OPTS: -Xmx36g
@@ -95,6 +110,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: build-output
+          # Upload per-module target/ directories produced by the release-tag
+          # build. Test jobs re-checkout the release tag from git.
           path: |
             ~/**/target/
             !~/**/target/*.jar
@@ -111,6 +128,13 @@ jobs:
           retention-days: 1
           overwrite: true
           if-no-files-found: error
+
+      - name: Purge engine artifacts before cache save
+        # actions/cache's post-job save snapshots ~/.m2/repository at the
+        # end of the job. We don't want the just-built engine jars in that
+        # snapshot.
+        if: always()
+        run: rm -rf ~/.m2/repository/org/finos/legend/engine
 
       - name: Set Test Matrix
         id: testMatrix
@@ -130,8 +154,12 @@ jobs:
       - build
 
     steps:
-      - name: Checkout repo
+      - name: Checkout Release Tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.name }}-${{ github.event.inputs.releaseVersion }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Before Test
         uses: ./.github/workflows/actions/before-test
@@ -141,11 +169,11 @@ jobs:
         run: echo EXCLUSION_MODULES=`jq -c '.include | map(.modules) | flatten | map("!org.finos.legend.engine:" + .) | join(",")' ./.github/workflows/resources/modulesToTest.json` >> $GITHUB_OUTPUT
 
       - name: Test
-        working-directory: target/checkout
         env:
           MAVEN_OPTS: "-Xmx1g"
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          JDK_JAVA_OPTIONS: "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
         run: |
           mvn -B -e surefire:test -pl ${{ steps.modulesToExclude.outputs.EXCLUSION_MODULES }} -P release,docker,pct-cloud-test -T2 -DargLine="-Xmx6g" -Dsurefire.reports.directory=${GITHUB_WORKSPACE}/surefire-reports-aggregate
 
@@ -166,8 +194,12 @@ jobs:
       matrix: ${{fromJson(needs.build.outputs.testMatrix)}}
 
     steps:
-      - name: Checkout repo
+      - name: Checkout Release Tag
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.name }}-${{ github.event.inputs.releaseVersion }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Before Test
         uses: ./.github/workflows/actions/before-test
@@ -180,11 +212,11 @@ jobs:
           echo INCLUSION_MODULES=`jq -c 'map("org.finos.legend.engine:" + .) | join(",")' <<< $MODULES` >> $GITHUB_OUTPUT
 
       - name: Test
-        working-directory: target/checkout
         env:
           MAVEN_OPTS: "-Xmx1g"
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}          
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          JDK_JAVA_OPTIONS: "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
         run: |
           mvn -B -e surefire:test -pl ${{ steps.modulesToInclude.outputs.INCLUSION_MODULES }} -P release,docker,pct-cloud-test -T2 -DargLine="-Xmx6g" -Dsurefire.reports.directory=${GITHUB_WORKSPACE}/surefire-reports-aggregate
 
@@ -203,8 +235,12 @@ jobs:
       - test-modules
     steps:
 
-      - name: Checkout repo
+      - name: Checkout Release Tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.name }}-${{ github.event.inputs.releaseVersion }}
+          fetch-depth: 1
+          persist-credentials: false
 
       - name: Download m2 repository for publishing
         uses: actions/download-artifact@v8
@@ -213,8 +249,19 @@ jobs:
           path: ~/.m2/repository/org/finos/legend/engine
 
       - name: Create bundle to publish
-        working-directory: target/checkout
+        env:
+          RELEASE_VERSION: ${{ github.event.inputs.releaseVersion }}
         run: |
+          # Defensive guard: keep only directories whose name is exactly the
+          # release version under each artifact path. Should be a no-op when
+          # the build job already purged stale artifacts, but protects the
+          # publish step against any future regression that lets prior-release
+          # jars slip into ~/.m2/repository/org/finos/legend/engine.
+          find ~/.m2/repository/org/finos/legend/engine -mindepth 2 -type d \
+            -regextype posix-extended \
+            -regex '.*/[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.+-]+)?$' \
+            ! -name "$RELEASE_VERSION" -prune -exec rm -rf {} +
+
           mkdir -p central-staging/org/finos/legend
           cp -R ~/.m2/repository/org/finos/legend/engine central-staging/org/finos/legend
           find central-staging -type f \( -name "*.xml" -o -name "*.repositories" \) -delete
@@ -229,7 +276,7 @@ jobs:
           cd central-staging && zip -r ../central-publishing/central-bundle.zip org
 
       - name: Publish bundle
-        working-directory: target/checkout/central-publishing
+        working-directory: central-publishing
         run: |
           token=$(printf "$CI_DEPLOY_USERNAME:$CI_DEPLOY_PASSWORD" | base64)
           httpCode=$(curl -s -o response.json -w "%{http_code}" -X POST -H "Authorization: Bearer $token" --form bundle=@central-bundle.zip https://central.sonatype.com/api/v1/publisher/upload?publishingType=AUTOMATIC)

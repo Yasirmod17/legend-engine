@@ -18,7 +18,7 @@
     <parent>
         <groupId>org.finos.legend.engine</groupId>
         <artifactId>legend-engine-xts-persistence</artifactId>
-        <version>4.131.5-SNAPSHOT</version>
+        <version>4.133.1-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -56,6 +56,7 @@
                         <skip>${javadoc.skip}</skip>
                         <source>8</source>
                         <doclint>none</doclint>
+                        <excludePackageNames>org.finos.legend.pure.generated</excludePackageNames>
                         <sourcepath>
                             ${project.build.sourceDirectory}:${project.build.directory}/generated-sources/annotations
                         </sourcepath>

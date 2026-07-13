@@ -18,7 +18,7 @@
     <parent>
         <groupId>org.finos.legend.engine</groupId>
         <artifactId>legend-engine-xts-deephaven</artifactId>
-        <version>4.131.5-SNAPSHOT</version>
+        <version>4.133.1-SNAPSHOT</version>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
@@ -107,22 +107,22 @@
                     <targetDir>${project.build.directory}/classes/pct-reports/</targetDir>
                     <PCTTestSuites>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_RelationFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$RelationFunctions
                         </PCTTestSuite>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_EssentialFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$EssentialFunctions
                         </PCTTestSuite>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_StandardFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$StandardFunctions
                         </PCTTestSuite>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_GrammarFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$GrammarFunctions
                         </PCTTestSuite>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_ScenarioQuantFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$ScenarioQuantFunctions
                         </PCTTestSuite>
                         <PCTTestSuite>
-                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_UnclassifiedFunctions_PCT
+                            org.finos.legend.engine.plan.execution.stores.test.deephaven.pct.Test_Deephaven_PCT$UnclassifiedFunctions
                         </PCTTestSuite>
                     </PCTTestSuites>
                 </configuration>

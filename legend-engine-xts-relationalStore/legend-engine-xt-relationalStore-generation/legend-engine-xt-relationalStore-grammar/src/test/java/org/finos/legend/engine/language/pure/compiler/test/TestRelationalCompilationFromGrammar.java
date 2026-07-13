@@ -439,6 +439,48 @@ public class TestRelationalCompilationFromGrammar extends TestCompilationFromGra
                 ")\n", "COMPILATION error at [27:5-34]: The set implementation 'addressSet' referenced in the inline embedded mapping for property 'address' does not exist in the mapping my::testMapping");
     }
 
+    @Test
+    public void testRelationFunctionEmbeddedMappingCompiles()
+    {
+        test(RELATION_MAPPING_EMBEDDED_PURE_SOURCE + "###Mapping\n" +
+                "Mapping my::testMapping\n" +
+                "(\n" +
+                "  *my::PersonWithAddress[personWithAddr]: Relation\n" +
+                "  {\n" +
+                "    ~func my::personWithAddressFunction():Relation<Any>[1]\n" +
+                "    firstName: FIRSTNAME,\n" +
+                "    age: AGE,\n" +
+                "    address\n" +
+                "    (\n" +
+                "      street: STREET,\n" +
+                "      city: CITY\n" +
+                "    )\n" +
+                "  }\n" +
+                ")\n");
+    }
+
+    @Test
+    public void testRelationFunctionInlineEmbeddedMappingCompiles()
+    {
+        test(RELATION_MAPPING_EMBEDDED_PURE_SOURCE + "###Mapping\n" +
+                "Mapping my::testMapping\n" +
+                "(\n" +
+                "  *my::PersonWithAddress[personWithAddr]: Relation\n" +
+                "  {\n" +
+                "    ~func my::personWithAddressFunction():Relation<Any>[1]\n" +
+                "    firstName: FIRSTNAME,\n" +
+                "    age: AGE,\n" +
+                "    address () Inline [addressSet]\n" +
+                "  }\n" +
+                "  *my::FullAddress[addressSet]: Relation\n" +
+                "  {\n" +
+                "    ~func my::personWithAddressFunction():Relation<Any>[1]\n" +
+                "    street: STREET,\n" +
+                "    city: CITY\n" +
+                "  }\n" +
+                ")\n");
+    }
+
 
     @Override
     public String getDuplicatedElementTestCode()
@@ -3942,6 +3984,110 @@ public class TestRelationalCompilationFromGrammar extends TestCompilationFromGra
                 "    firstName: FIRSTNAME,\n" +
                 "    age: AGE\n" +
                 "  }\n" +
+                ")\n");
+    }
+
+    @Test
+    public void testRelationalMappingTestSuiteWithRelationReturnType()
+    {
+        test("###Relational\n" +
+                "Database store::TestDB\n" +
+                "(\n" +
+                "  Table FirmTable\n" +
+                "  (\n" +
+                "    id INTEGER PRIMARY KEY,\n" +
+                "    legal_name VARCHAR(200)\n" +
+                "  )\n" +
+                "  Table PersonTable\n" +
+                "  (\n" +
+                "    id INTEGER PRIMARY KEY,\n" +
+                "    firm_id INTEGER,\n" +
+                "    firstName VARCHAR(200),\n" +
+                "    lastName VARCHAR(200)\n" +
+                "  )\n" +
+                "\n" +
+                "  Join FirmPerson(PersonTable.firm_id = FirmTable.id)\n" +
+                ")\n" +
+                "\n" +
+                "\n" +
+                "###Pure\n" +
+                "Class model::Person\n" +
+                "{\n" +
+                "  firstName: String[1];\n" +
+                "  lastName: String[1];\n" +
+                "}\n" +
+                "\n" +
+                "Class model::Firm\n" +
+                "{\n" +
+                "  legalName: String[1];\n" +
+                "  employees: model::Person[*];\n" +
+                "}\n" +
+                "\n" +
+                "\n" +
+                "###Mapping\n" +
+                "Mapping execution::RelationalMapping\n" +
+                "(\n" +
+                "  *model::Person: Relational\n" +
+                "  {\n" +
+                "    ~primaryKey\n" +
+                "    (\n" +
+                "      [store::TestDB]PersonTable.id\n" +
+                "    )\n" +
+                "    ~mainTable [store::TestDB]PersonTable\n" +
+                "    firstName: [store::TestDB]PersonTable.firstName,\n" +
+                "    lastName: [store::TestDB]PersonTable.lastName\n" +
+                "  }\n" +
+                "  *model::Firm: Relational\n" +
+                "  {\n" +
+                "    ~primaryKey\n" +
+                "    (\n" +
+                "      [store::TestDB]FirmTable.id\n" +
+                "    )\n" +
+                "    ~mainTable [store::TestDB]FirmTable\n" +
+                "    legalName: [store::TestDB]FirmTable.legal_name,\n" +
+                "    employees[model_Person]: [store::TestDB]@FirmPerson\n" +
+                "  }\n" +
+                "  testSuites:\n" +
+                "    [\n" +
+                "      testSuite1:\n" +
+                "      {\n" +
+                "        function: |model::Firm.all()->project(~['Employees/First Name': x|$x.employees.firstName, 'Employees/Last Name': x|$x.employees.lastName, 'Legal Name': x|$x.legalName]);\n" +
+                "        tests:\n" +
+                "        [\n" +
+                "          test1:\n" +
+                "          {\n" +
+                "            data:\n" +
+                "            [\n" +
+                "              store::TestDB:\n" +
+                "  Relation\n" +
+                "  #{\n" +
+                "    default.PersonTable:\n" +
+                "      id,firm_id,firstName,lastName\n" +
+                "      1,1,John,Doe\n" +
+                "      2,1,Nicole,Smith\n" +
+                "      3,2,Time,Smith;\n" +
+                "\n" +
+                "    default.FirmTable:\n" +
+                "      id,legal_name\n" +
+                "      1,Finos\n" +
+                "      2,Apple;\n" +
+                "  }#\n" +
+                "            ];\n" +
+                "            asserts:\n" +
+                "            [\n" +
+                "              shouldPass:\n" +
+                "                Relation\n" +
+                "                #{\n" +
+                "                  Employees/First Name, Employees/Last Name, Legal Name\n" +
+                "                  John                , Doe                , Finos\n" +
+                "                  Nicole              , Smith              , Finos\n" +
+                "                  Time                , Smith              , Apple;\n" +
+                "                }#\n" +
+                "            ];\n" +
+                "          }\n" +
+                "        ];\n" +
+                "      }\n" +
+                "    ]\n" +
                 ")\n");
     }
 }

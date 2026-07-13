@@ -192,6 +192,7 @@ legend-engine-core/
           EMITPhase.java                  ← Phase enum
           EMITPhaseResult.java            ← Per-phase result
           EMITModelLoader.java            ← .pure file loading utility
+          EMITModelDiscovery.java         ← Filesystem + classpath descriptor discovery
           EMITSourceFile.java             ← Resolved source file
           EMITSourceSet.java              ← Collection of source files
           catalog/
@@ -215,14 +216,79 @@ legend-engine-core/
       src/
         main/java/.../emit/junit/
           EMITTestSuiteBuilder.java       ← @TestFactory task builder
-          EMITModelDiscovery.java         ← Classpath .emit.yaml scanner
+    legend-engine-emit-report/            ← HTML coverage renderer (framework-side)
+      pom.xml
+      src/
+        main/java/.../emit/report/
+          EMIT_to_HTML.java               ← buildHTML(descriptors, repoRoot) / writeHTML(...)
+    legend-engine-emit-maven-plugin/      ← Build-time HTML coverage report generator
+      pom.xml
+      src/
+        main/java/.../emit/maven/
+          EMITCoverageReportGenerationMojo.java   ← @Mojo("generate-EMIT-coverage-report"), generate-resources phase
 ```
 
-- **`legend-engine-emit`** contains the core pipeline (runner, result models, model loader, catalog
-  infrastructure) and has no JUnit dependency. It can be used standalone in scripts or CI pipelines.
-- **`legend-engine-emit-junit`** depends on `legend-engine-emit` and adds the JUnit 5 integration
-  layer (`EMITTestSuiteBuilder`, `EMITModelDiscovery`). Test modules that want `@TestFactory`-based
-  EMIT execution depend on this module.
+- **`legend-engine-emit`** contains the core pipeline (runner, result models,
+  model loader, catalog infrastructure) plus `EMITModelDiscovery` — the
+  descriptor-discovery API used by the JUnit binding
+  (`@TestFactory` classpath enumeration) and by the maven plugin (walking
+  each recorded `emit-models/` directory for `*.emit.yaml`). It has no
+  JUnit dependency and can be used standalone in scripts or CI pipelines.
+- **`legend-engine-emit-junit`** depends on `legend-engine-emit` and adds the
+  JUnit 5 integration layer (`EMITTestSuiteBuilder`). Test modules that want
+  `@TestFactory`-based EMIT execution depend on this module.
+- **`legend-engine-emit-report`** houses `EMIT_to_HTML`, the pure HTML
+  renderer for a set of `EMITModelDescriptor`s. It exposes two static
+  entry points: `buildHTML(descriptors, repoRoot)` returns the HTML as a
+  string; `writeHTML(descriptors, outputFile, repoRoot)` writes it to
+  disk (creating parent directories as needed). The renderer has no
+  awareness of Maven, of the filesystem walk, or of the classpath — those
+  concerns live in the maven plugin and in `EMITModelDiscovery`
+  respectively. Keeping the renderer isolated in its own module means
+  the maven plugin can depend on it without dragging in JUnit, and the
+  runner module (`legend-engine-emit`) can stay JUnit-free.
+- **`legend-engine-emit-maven-plugin`** is the build-time tool the server
+  pom binds into `generate-resources`. Its `generate-EMIT-coverage-report`
+  goal locates the reactor root by walking up `MavenProject.getParent()`
+  from the consuming project (stopping at the topmost ancestor that
+  still has a `getBasedir()` on disk, so externally-resolved parent
+  POMs are not crossed), then traverses that root with
+  `Files.walkFileTree`. Every check happens uniformly in
+  `preVisitDirectory` using `stream().anyMatch(...)`:
+  - `excludedDirectoryNamePrefixes` — `String.startsWith` on the last
+    name component (default `["."]`, prunes `.git`, `.idea`, `.mvn`, …).
+  - `excludedDirectoryNames` — `String.equals` on the last name
+    component (default `["target"]`).
+  - `excludedRelativeSubpaths` — `rel.endsWith(fs.getPath(subpath))`
+    (default `["src/main"]`). `Path.endsWith` is component-wise, so
+    excluding `a/b/c` never accidentally prunes a sibling `a/b/cd`, and
+    everything works cross-platform without manual separator
+    concatenation.
+  - `includedRelativeSubpaths` — same component-wise
+    `rel.endsWith(fs.getPath(subpath))` check (default
+    `["src/test/resources/emit-models"]`). Matches record the dir as an
+    emit-models dir and return `SKIP_SUBTREE` — no need to descend,
+    since the mojo then hands each recorded dir to
+    `EMITModelDiscovery.findEmitYamls(dir)` inside its static
+    `parseDescriptorsUnder` helper to enumerate the `*.emit.yaml`
+    inside.
+
+  The resulting descriptors are passed to
+  `EMIT_to_HTML.writeHTML(descriptors, outputFilePath.toPath(), repoRoot)`.
+  The default `outputFilePath` is
+  `${project.build.outputDirectory}/emit/emit-coverage.html`
+  (i.e. `target/classes/emit/emit-coverage.html`), which lands the
+  rendered report under `target/classes/` — so Maven's jar packaging
+  automatically bundles it into the consuming jar with no extra
+  `<configuration>` needed. `legend-engine-server-http-server` pins
+  `outputFilePath` explicitly to that same value (so the server jar's
+  bundled resource path stays fixed even if the plugin default is ever
+  changed) and extends `excludedDirectoryNames` to include
+  `legend-engine-emit-junit`, so the binding module's bootstrap
+  examples are not double-counted in the server-side report. All four
+  discovery-config fields plus `outputFilePath` are `@Parameter`s, so
+  any consuming pom can tune them via `<configuration>` without forking
+  the plugin. See §5.4.
 
 The parent aggregator sits directly under `legend-engine-core/` (as a sibling of
 `legend-engine-core-testable`, `legend-engine-core-pure`, etc.) because EMIT spans the full engine
@@ -267,8 +333,16 @@ This distribution model has several advantages:
 - **Dependencies**: Each test module has the right classpath for its feature (e.g., a relational
   EMIT test module naturally has relational store dependencies on its classpath).
 - **Parallelism**: Tests run as part of each module's build, not as a single bottleneck module.
-- **Catalog aggregation**: The `EMITCatalogBuilder` can scan across multiple classpath roots
-  to assemble a unified catalog from all distributed models.
+- **Build-time HTML aggregation**: At server build time,
+  `legend-engine-emit-maven-plugin` walks the legend-engine multi-module
+  tree, discovers every module's `emit-models/`, parses each `*.emit.yaml`,
+  and renders the HTML coverage report to
+  `${project.build.outputDirectory}/emit/emit-coverage.html` — i.e.
+  under `target/classes/`, so Maven's jar packaging automatically
+  bundles it into the server jar. At runtime the server's `EMIT`
+  JAX-RS handler simply streams that pre-rendered resource. No
+  per-module configuration is required — dropping a yaml under any
+  module's `src/test/resources/emit-models/` is enough. See §5.4.
 
 ### 3.3 Core API
 
@@ -457,18 +531,22 @@ To test EMIT models in a module, create a single test class:
 public class MyModuleEMITTestSuite
 {
     @TestFactory
-    Stream<DynamicTest> emit()
+    Stream<DynamicContainer> emit()
     {
-        // Discovers models and returns a flattened stream of granular dynamic
-        // tests covering initialization (parse, compile, model generation),
-        // generation, testing, and plan creation.
-        return EMITTestSuiteBuilder.taskStream("emit-models/");
+        // Discovers models and returns one DynamicContainer per model, with
+        // tasks grouped by phase (parse, compile, generation, test, plan).
+        return EMITTestSuiteBuilder.testContainers("emit-models/");
     }
 }
 ```
 
-`EMITTestSuiteBuilder` also exposes `taskList(String)` for callers that prefer
-a `List<DynamicTest>` (e.g., for fan-out into nested containers).
+`EMITTestSuiteBuilder` also exposes `tests(String)` for callers that
+prefer a flat `Stream<DynamicTest>` (each task carries a `[model-name] …`
+prefix), plus per-model selectors on both entry points: `testContainers(root,
+names…)` / `tests(root, names…)` / `testContainer(root, name)`. The
+single-arg `taskStream(...)` / `taskList(...)` methods are the former names
+for the flat form and are now **deprecated** — prefer `tests(...)` or
+`testContainers(...)`.
 
 When JUnit invokes the factory method, `EMITTestSuiteBuilder` scans for `*.emit.yaml` files and loads each model descriptor (only this load is eager — the model's container is named after the descriptor). Phase 1 (Parse), Phase 2 (Compile), and Phase 3 (Model Generation) each run *inside* their own DynamicTest: JUnit consumes dynamic-test streams lazily, executing each task before pulling the next, so the duration JUnit reports for the Parsing or Compilation task is the real cost of that phase. If a phase fails, its task fails and no subsequent tasks are emitted for that model. Downstream task discovery is deferred until after the initialization tasks have run, and operates on the model-generation-enriched PMCD, so any element produced by a `GenerationSpecification` is eligible for downstream tasks. By inspecting that enriched model the builder identifies every file-generation specification, every artifact-generation candidate, every test (modern Testable plus legacy Mapping/Service tests), and every service.
 
@@ -522,6 +600,70 @@ EMIT Result: FAILED
   --   PLAN_GENERATION  (0ms) - skipped due to failure in TEST_EXECUTION
 ```
 
+### 5.4 HTML Coverage Report
+
+Beyond per-model JUnit output, EMIT exposes a **read-only HTML coverage
+dashboard** that visualises which models exist in the catalog and which
+features they exercise. It complements §5.2's per-model execution view
+with a catalog-wide one — feature combinations, a heatmap of
+descriptor-to-feature coverage, and a list of taxonomy features that no
+model currently covers (the "coverage gaps" tab).
+
+There is a single path to the HTML: it is produced at server build time
+by `legend-engine-emit-maven-plugin` and served at runtime by the
+`EMIT` JAX-RS handler streaming the pre-rendered classpath resource.
+
+**Build-time generation.** The mojo's `generate-EMIT-coverage-report`
+goal (bound to `generate-resources`) locates the reactor root by walking
+up `MavenProject.getParent()` from the consuming project, stopping at
+the topmost ancestor that still has a `getBasedir()` on disk — so
+externally-resolved parent POMs from a Maven repository are not crossed
+and no specific groupId/artifactId is hardcoded. It then traverses that
+root's directory tree with `Files.walkFileTree`. Every check happens
+inside a single `preVisitDirectory` visitor using `stream().anyMatch(...)`:
+name-prefix exclusion (default `["."]`, prunes `.git`/`.idea`/`.mvn`/…),
+name-equals exclusion (default `["target"]`), relative-subpath exclusion
+(default `["src/main"]`), and relative-subpath **inclusion** (default
+`["src/test/resources/emit-models"]`). The subpath checks use
+`rel.endsWith(fs.getPath(subpath))`, which is component-wise — no manual
+separator gymnastics, and no false hits like `a/b/cd` matching `a/b/c`.
+Any subtree matching an exclusion returns `SKIP_SUBTREE`; a match on
+inclusion also returns `SKIP_SUBTREE` after recording the dir (the mojo
+then enumerates its `*.emit.yaml` files itself via
+`EMITModelDiscovery.findEmitYamls(dir)`). The recorded descriptors are
+handed to `EMIT_to_HTML.writeHTML(descriptors, outputFile, repoRoot)`
+in the `legend-engine-emit-report` module, which delegates to
+`buildHTML(...)` for the rendering and takes care of creating the
+output's parent directories.
+
+**Configuration.** All five parameters are `@Parameter` fields, so a
+consuming pom can tune them via `<configuration>` without forking the
+plugin. Defaults, and the overrides `legend-engine-server-http-server`
+still applies, are:
+
+| Parameter | Default | Server override |
+|---|---|---|
+| `outputFilePath` | `${project.build.outputDirectory}/emit/emit-coverage.html` (i.e. `target/classes/emit/...`, so jar packaging automatically bundles it into the consuming jar) | Pinned explicitly to the default so the server jar's bundled resource path stays fixed if the plugin default ever changes |
+| `includedRelativeSubpaths` | `["src/test/resources/emit-models"]` | — |
+| `excludedDirectoryNames` | `["target"]` | `["target", "legend-engine-emit-junit"]` (excludes the binding module's bootstrap examples from the server-side report) |
+| `excludedDirectoryNamePrefixes` | `["."]` | — |
+| `excludedRelativeSubpaths` | `["src/main"]` | — |
+
+**Runtime serving.** The `EMIT` handler at `GET /api/emit/html` streams
+the `/emit/emit-coverage.html` classpath resource. If the resource is
+missing — e.g. the server was assembled without the mojo bound in its
+pom — the endpoint returns `503 Service Unavailable` with an explicit
+message about rebuilding the server module. The runtime has no
+dependency on `EMITModelDiscovery`, no catalog manifest, and nothing
+that could drift between build and serve — whatever HTML the mojo wrote
+is exactly what is served.
+
+Adding a new yaml is just dropping it under any module's
+`src/test/resources/emit-models/`; the next clean build of the server
+picks it up automatically. The mojo silently skips any module whose pom
+declares a customized `<build><testResources>`, since the report only
+supports the conventional `src/test/resources` layout.
+
 ---
 
 ## 6. Example Catalog Design
@@ -562,17 +704,17 @@ modelSources:
       excludes:
         - emit-models/core-api/**/*_experimental.pure
 
-# Features exercised by this model.
-# Uses a controlled taxonomy (see §7.2).
+# Features exercised by this model — domain:capability pairs.
+# Uses a controlled taxonomy (see §6.2).
 features:
-  - class
-  - association
-  - relational-mapping
-  - relational-store
-  - relational-connection
-  - service
-  - service-test
-  - file-generation
+  - execution:file-generation
+  - execution:service
+  - execution:service-test
+  - grammar:association
+  - scaffolding:class
+  - scaffolding:relational-connection
+  - scaffolding:relational-mapping
+  - scaffolding:relational-store
 
 # Store types involved.
 stores:
@@ -590,22 +732,167 @@ tags:
 
 ### 6.2 Feature Taxonomy
 
-The `features` field uses values from a controlled vocabulary. The taxonomy is extensible;
-new features can be added as the catalog grows. The initial set:
+Each value in the `features` list uses the format **`domain:capability`**, where
+*domain* identifies the pipeline stage or concern area and *capability* names the
+specific code path being exercised. This makes the exact coverage of every test
+immediately visible — you can tell at a glance which domains interact and which
+capabilities are novel.
 
-| Category | Feature Tags |
+The taxonomy is extensible; add new entries as the catalog grows (and document them
+here in the same PR). Features are sorted alphabetically by domain, then capability.
+
+#### Scaffolding (always present — excluded from complexity scoring)
+
+These features appear in virtually every EMIT test and represent baseline
+infrastructure rather than the feature under test:
+
+| Feature | Description |
 |---|---|
-| **Types** | `class`, `enumeration`, `association`, `profile`, `measure`, `function` |
-| **Constraints** | `constraint`, `derived-property`, `qualified-property` |
-| **Mapping** | `mapping`, `m2m-mapping`, `relational-mapping`, `enumeration-mapping`, `aggregation-aware-mapping`, `operation-mapping` |
-| **Store** | `relational-store`, `service-store`, `flat-data-store` |
-| **Connection** | `relational-connection`, `model-connection`, `service-store-connection` |
-| **Runtime** | `runtime`, `embedded-runtime` |
-| **Service** | `service`, `service-test`, `multi-execution-service`, `post-validation` |
-| **Generation** | `file-generation`, `model-generation`, `generation-specification` |
-| **Data** | `data-element`, `test-data`, `shared-test-data` |
-| **External Format** | `external-format`, `binding`, `schema-set` |
-| **Function Activator** | `hosted-service`, `snowflake-app`, `bigquery-function` |
+| `scaffolding:class` | At least one Pure class definition |
+| `scaffolding:relational-store` | A relational store definition (typically H2) |
+| `scaffolding:relational-connection` | A relational database connection |
+| `scaffolding:relational-mapping` | Base relational class mapping (no special features) |
+| `scaffolding:m2m-mapping` | Base model-to-model mapping |
+| `scaffolding:runtime` | A runtime definition |
+| `scaffolding:model-connection` | A model connection (M2M tests) |
+
+#### Grammar — Pure language constructs
+
+| Feature | Description |
+|---|---|
+| `grammar:association` | Association (1:1, 1:N, N:M) |
+| `grammar:class-inheritance` | Class inheritance hierarchy |
+| `grammar:constraint` | Class-level constraint |
+| `grammar:derived-property` | Derived (computed) property |
+| `grammar:enumeration` | Enumeration type definition |
+| `grammar:function` | Standalone Pure function |
+| `grammar:measure` | Measure / unit definition |
+| `grammar:nested-association` | Multi-level association traversal |
+| `grammar:profile` | Profile / stereotype / tag definition |
+| `grammar:qualified-property` | Qualified (parameterised) property |
+
+#### Mapping — transform and mapping-level features
+
+| Feature | Description |
+|---|---|
+| `mapping:aggregation-aware-mapping` | Aggregation-aware mapping |
+| `mapping:cross-store` | Cross-store mapping (M2M ↔ relational) |
+| `mapping:enumeration-mapping` | Enumeration value mapping / transform |
+| `mapping:m2m-derived-source-property` | Derived property on M2M source class |
+| `mapping:m2m-local-property` | Local property in M2M mapping |
+| `mapping:m2m-transform` | Model-to-model transform expression |
+| `mapping:mapping` | Generic mapping (legacy tag) |
+| `mapping:mapping-include` | Mapping include composition |
+| `mapping:operation-mapping` | Operation mapping (inheritance dispatch) |
+| `mapping:operation-mapping-merge` | Merge operation mapping |
+| `mapping:operation-mapping-merge-validation` | Merge with cross-set validation |
+| `mapping:relational-association-implementation` | Association implementation in relational mapping |
+| `mapping:relational-distinct` | DISTINCT projection |
+| `mapping:relational-embedded` | Embedded relational mapping |
+| `mapping:relational-group-by` | GROUP BY projection |
+| `mapping:relational-inline-embedded` | Inline embedded mapping |
+| `mapping:relational-joined-table-inheritance` | Joined-table inheritance strategy |
+| `mapping:relational-literal` | Literal value in mapping |
+| `mapping:relational-literal-list` | Literal list in mapping |
+| `mapping:relational-main-table-alias` | Main table alias override |
+| `mapping:relational-otherwise-embedded` | Otherwise-embedded mapping |
+| `mapping:relational-polymorphic-query` | Polymorphic query dispatch |
+| `mapping:relational-primary-key` | Explicit primary key specification |
+| `mapping:relational-single-table-inheritance` | Single-table inheritance strategy |
+| `mapping:relational-table-alias-column` | Table-alias column reference |
+| `mapping:router-union` | Router union mapping |
+| `mapping:store-union` | Store union mapping |
+
+#### Store — relational store-level features
+
+| Feature | Description |
+|---|---|
+| `store:relational-cross-schema` | Cross-schema table reference |
+| `store:relational-cross-table-filter` | Cross-table filter |
+| `store:relational-dyna-function` | Dynamic function in store definition |
+| `store:relational-filter` | Table-level filter |
+| `store:relational-inline-view` | Inline view (subquery) |
+| `store:relational-inner-join` | Inner join |
+| `store:relational-left-outer-join` | Left outer join |
+| `store:relational-multi-table` | Multi-table store definition |
+| `store:relational-nested-join` | Nested (chained) join |
+| `store:relational-outer-join` | Full outer join |
+| `store:relational-right-outer-join` | Right outer join |
+| `store:service-store` | Service store |
+| `store:flat-data-store` | Flat-data store |
+
+#### Milestoning — temporal features
+
+| Feature | Description |
+|---|---|
+| `milestoning:all-versions-in-range-query` | All-versions-in-range temporal query |
+| `milestoning:all-versions-query` | All-versions temporal query |
+| `milestoning:bi-temporal` | Bi-temporal milestoning (business + processing) |
+| `milestoning:business-temporal` | Business-temporal milestoning |
+| `milestoning:milestoning` | Generic milestoning marker |
+| `milestoning:point-in-time-query` | Point-in-time temporal query |
+| `milestoning:processing-temporal` | Processing-temporal milestoning |
+
+#### Execution — service, generation, and test infrastructure
+
+| Feature | Description |
+|---|---|
+| `execution:bigquery-function` | BigQuery function activator |
+| `execution:binding` | External format binding |
+| `execution:data-element` | Data element definition |
+| `execution:external-format` | External format specification |
+| `execution:external-format-binding` | External format binding |
+| `execution:file-generation` | File generation specification |
+| `execution:hosted-service` | Hosted service function activator |
+| `execution:model-generation` | Model generation specification |
+| `execution:multi-execution-service` | Multi-execution service |
+| `execution:plan-generation` | Execution plan generation |
+| `execution:post-validation` | Service post-validation |
+| `execution:schema-set` | Schema set definition |
+| `execution:service` | Service definition |
+| `execution:service-test` | Service test suite |
+| `execution:shared-test-data` | Shared test data element |
+| `execution:snowflake-app` | Snowflake app function activator |
+| `execution:test-data` | Test data definition |
+
+#### Persistence — service-driven dataset ingestion
+
+| Feature | Description |
+|---|---|
+| `persistence:append-only` | Append-only updates handling on a non-temporal target |
+| `persistence:auditing` | Audit column (e.g. batch date-time) written to the target |
+| `persistence:bitemporal` | Bitemporal target milestoning (processing + source-derived dimensions) |
+| `persistence:delete-indicator` | Delta delete-indicator action (soft deletes) |
+| `persistence:delta` | Delta dataset type |
+| `persistence:graph-fetch-service-output` | Graph-fetch service output (vs. TDS) |
+| `persistence:nontemporal` | Non-temporal target (no milestoning) |
+| `persistence:notifier` | Persistence notifier (email / PagerDuty notifyees) |
+| `persistence:persistence` | Persistence element (service-driven dataset ingestion) |
+| `persistence:service-output-target` | Service-output target (`serviceOutputTargets` block) |
+| `persistence:snapshot` | Snapshot dataset type |
+| `persistence:unitemporal` | Unitemporal (processing-time) target milestoning |
+
+#### Complexity
+
+Complexity is determined by **domain-crossing depth** — how many distinct pipeline
+domains are exercised by non-scaffolding features:
+
+| Complexity | Criteria | EMIT value proposition |
+|---|---|---|
+| **basic** | 1–2 domains | Single capability or simple two-domain interaction through the full pipeline |
+| **intermediate** | 3–4 domains | Capabilities from multiple domains interacting |
+| **advanced** | 5+ domains | Broad multi-domain composition or cross-store scenarios |
+
+#### Evolving the Taxonomy
+
+When harvesting models from a new Studio project or adding a test for a new engine
+feature, you may encounter capabilities that do not map to any existing entry. In
+that case:
+
+1. Add the new `domain:capability` entry to the appropriate table above.
+2. Include the taxonomy update in the same PR as the new EMIT test.
+3. If a new *domain* is needed (e.g., `data-quality`), add a new
+   subsection and update the complexity-scoring guidance accordingly.
 
 ### 6.3 Catalog Index
 
@@ -614,9 +901,25 @@ Today the catalog metadata is captured by `EMITModelDescriptor` (under
 `*.emit.yaml` and carries the descriptor fields plus the resolved primary /
 dependency file paths.
 
-The classpath scan that discovers descriptors is implemented in
-`EMITModelDiscovery` (in `legend-engine-emit-junit`), but it is currently
-oriented toward the JUnit `@TestFactory` flow rather than catalog query.
+Descriptor discovery is implemented in `EMITModelDiscovery` (in
+`legend-engine-emit`), which exposes two parallel families of `find…`
+methods:
+
+- **Filesystem** — `findEmitYamls(Path)` walks a single directory tree
+  for `*.emit.yaml`. Used by the maven plugin's
+  `parseDescriptorsUnder(...)` helper: the plugin's own walker
+  (`collectEmitModelsDirs`) applies the exclusion / inclusion rules and
+  hands each recorded `emit-models/` directory to `findEmitYamls(Path)`
+  to enumerate the yamls inside. Also usable directly by any tool that
+  already knows which directory to scan.
+- **Classpath** — `findEmitYamls(String)` /
+  `findEmitYamls(ClassLoader, String)` enumerate every yaml under the
+  given classpath root across all loaded jars; `findEmitYaml(String,
+  String)` / `findEmitYaml(ClassLoader, String, String)` resolve a single
+  yaml by name. Used by `EMITTestSuiteBuilder` so that the JUnit
+  `@TestFactory` picks up models from a module's own
+  `src/test/resources/emit-models/` and from any test-scoped jar that
+  contains the same layout.
 
 A dedicated catalog index — querying models by feature, store, complexity,
 and free-text search over titles/descriptions/tags — is **not yet
@@ -648,11 +951,11 @@ modelSources:
     - source: emit-models/basic/base-types.emit.yaml
 
 features:
-  - class
-  - derived-property
-  - mapping
-  - service
-  - service-test
+  - execution:service
+  - execution:service-test
+  - grammar:derived-property
+  - mapping:mapping
+  - scaffolding:class
 complexity: basic
 tags:
   - m2m
@@ -742,13 +1045,12 @@ Concrete artifact coordinates are kept in each module's `pom.xml`; listing them 
   and the classpath**, not declared in `emit.yaml` — keeping the test descriptor focused
   on what the model is, and letting an external tool decide which variations to actually
   run.
-- **Catalog search tool**: A web UI or CLI tool for searching and browsing the catalog index
-  (e.g., `emit search --feature relational-mapping --complexity basic`).
+- **Catalog search CLI**: A `emit search --feature relational-mapping --complexity basic`
+  command that filters the same descriptor set the HTML dashboard (§5.4) renders.
+  The dashboard's client-side filter bar already covers the in-browser case; a
+  scriptable CLI would help CI workflows and offline browsing.
 - **Auto-derived metadata**: Introspect `PureModelContextData` to supplement `emit.yaml` tags.
 - **Catalog completeness CI check**: Validate that every model has `emit.yaml`, required fields
   are present, and feature tags come from the controlled vocabulary.
 - **Model diff testing**: Compare EMIT results between two model versions.
 - **Performance benchmarking**: Track phase durations over time.
-- **Model coverage**: Track which model elements are exercised by tests.
-- **Feature coverage matrix**: Auto-generate a matrix showing which features are covered by
-  examples and which lack coverage, helping guide the creation of new examples.
