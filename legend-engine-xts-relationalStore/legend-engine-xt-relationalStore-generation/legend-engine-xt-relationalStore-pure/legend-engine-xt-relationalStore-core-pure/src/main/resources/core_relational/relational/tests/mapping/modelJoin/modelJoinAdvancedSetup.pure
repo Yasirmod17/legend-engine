@@ -632,7 +632,7 @@ Mapping meta::relational::tests::mapping::modelJoin::advanced::NestedModelJoinWi
 // =========================================================================
 // Relational SimpleEquality: employees.firmId == firm.id
 // =========================================================================
-Mapping meta::relational::tests::mapping::modelJoin::advanced::RelationalSimpleEqualityMapping
+Mapping meta::relational::tests::mapping::modelJoin::advanced::RelationalEqualityMapping
 (
   *meta::relational::tests::mapping::modelJoin::domain::Person[person]: Relational
   {
@@ -712,6 +712,6 @@ Mapping meta::relational::tests::mapping::modelJoin::advanced::ColumnCollisionMa
 
   Person_Firm: ModelJoin
   {
-    {employees: meta::relational::tests::mapping::modelJoin::domain::Person[1], firm: meta::relational::tests::mapping::modelJoin::domain::Firm[1]|$employees.address.city == $firm.city && $employees.address.country == $firm.headquarters.city}
+    {employees: meta::relational::tests::mapping::modelJoin::domain::Person[1], firm: meta::relational::tests::mapping::modelJoin::domain::Firm[1]|$employees.address.city == $firm.city && $employees.address.city == $firm.headquarters.city}
   }
 )

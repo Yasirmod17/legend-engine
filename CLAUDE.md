@@ -45,7 +45,7 @@ Run a single dialect's PCT suite:
 mvn test -pl legend-engine-xts-relationalStore/legend-engine-xt-relationalStore-dbExtension/legend-engine-xt-relationalStore-h2/legend-engine-xt-relationalStore-h2-PCT
 ```
 
-When a PCT test fails on a target, decide: real bug → fix; legitimately unsupported → add to that adapter's `expectedFailures` with an `AdapterQualifier` (`needsImplementation`, `unsupportedFeature`, `needsInvestigation`, `assertErrorMismatch`). See `docs/pct/expected-failures-howto.md`.
+When a PCT test fails on a target, decide: real bug → fix; legitimately unsupported → add the test to that adapter's JSON manifest file under `src/main/resources/pct-manifests/<adapter>/` as an `exclusions` entry with the `test` FQN and `expectedError` string (the test runner prints the copy-paste snippet on failure). See `docs/pct/expected-failures-howto.md`.
 
 Detailed PCT authoring guides: `docs/pct/` (`purefunction-howto.md`, `native-howto.md`, `wiring-howto.md`, `conventions.md`). PCT framework itself is defined in `legend-pure` upstream.
 
@@ -97,7 +97,7 @@ Protocol classes are versioned (`v1_24_0`, `v1_25_0`, …). Breaking changes req
 
 ## Conventions to follow
 
-- **Indentation:** Java 4 spaces, Pure 3 spaces, XML/JSON/YAML 4 spaces. No tabs anywhere (`.java`, `.xml`, `.pure` all checked).
+- **Indentation:** Java 4 spaces, Pure 2 spaces, XML/JSON/YAML 4 spaces. No tabs anywhere (`.java`, `.xml`, `.pure` all checked).
 - **Braces:** always required (including single-statement `if`). Opening brace on a new line; closing brace alone on its line.
 - **Copyright header:** every new file (including `.pure`) needs the Apache 2.0 header — Checkstyle enforces this.
 - **Logging:** SLF4J only — never `System.out.println`. For `INFO`-level operational events use `LogInfo` wrapper + `LoggingEventType` enum (in `legend-shared`); add new event types to the enum rather than free-text strings. Never log credentials/tokens, not even at DEBUG.

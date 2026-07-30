@@ -15,38 +15,63 @@
 ###Relational
 Database meta::relational::tests::mapping::relation::testDB
 (
+  // Most columns are NOT NULL so they map cleanly to [1] properties under the
+  // strict multiplicity check. SALARY is intentionally left nullable so we can
+  // exercise the [0..1]-column → [0..1]-property path in NullableSalaryMapping.
   Table personTable
   (
     ID INTEGER PRIMARY KEY,
-    "FIRST NAME" VARCHAR(100),
-    AGE INTEGER,
-    FIRMID INTEGER,
-    SALARY FLOAT,
-    EMPLOYEE_TYPE VARCHAR(20),
-    IS_MALE INTEGER
+    "FIRST NAME" VARCHAR(100) NOT NULL,
+    AGE INTEGER NOT NULL,
+    FIRMID INTEGER NOT NULL,
+    EMPLOYEE_TYPE VARCHAR(20) NOT NULL,
+    IS_MALE INTEGER NOT NULL,
+    SALARY FLOAT
   )
 
   Table firmTable
   (
     ID INTEGER PRIMARY KEY,
-    legalName VARCHAR(100)
+    legalName VARCHAR(100) NOT NULL
   )
 
   Table groupMembershipTable
   (
     GROUPID INTEGER PRIMARY KEY,
-    PERSONID INTEGER,
-    GROUPNAME VARCHAR(30)
+    PERSONID INTEGER NOT NULL,
+    GROUPNAME VARCHAR(30) NOT NULL
+  )
+
+  // Source for RFPM-lift variant tests. PAYLOAD holds JSON-encoded data that
+  // the lift router extracts via $src.PAYLOAD->get(...) chains.
+  Table personPayloadTable
+  (
+    ID INTEGER PRIMARY KEY,
+    PAYLOAD SEMISTRUCTURED
   )
 
   Table personWithAddressTable
   (
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
-    AGE INTEGER,
-    STREET VARCHAR(100),
-    CITY VARCHAR(100),
-    FIRMID INTEGER
+    FIRSTNAME VARCHAR(100) NOT NULL,
+    AGE INTEGER NOT NULL,
+    STREET VARCHAR(100) NOT NULL,
+    CITY VARCHAR(100) NOT NULL,
+    FIRMID INTEGER NOT NULL
+  )
+
+  Table tradeTable
+  (
+    ID INTEGER PRIMARY KEY,
+    quantity FLOAT NOT NULL,
+    tradeDate DATE NOT NULL,
+    settlementDateTime TIMESTAMP
+  )
+
+  Table distinctFirmTable
+  (
+    ID INTEGER NOT NULL,
+    LEGALNAME VARCHAR(100) NOT NULL
   )
 
   Join GroupMembership_Person(groupMembershipTable.PERSONID = personTable.ID)
@@ -55,6 +80,9 @@ Database meta::relational::tests::mapping::relation::testDB
 ###Relational
 Database meta::relational::tests::mapping::relation::MilestonedDB
 (
+  // Same NOT NULL strategy as testDB: columns mapped to [1] properties and
+  // milestoning marker columns are NOT NULL; SALARY remains nullable since
+  // it is not property-mapped in any of these tests.
   Table PERSON_TABLE_PROCESSING_SNAPSHOT
   (
     milestoning
@@ -62,10 +90,10 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       processing(PROCESSING_SNAPSHOT_DATE = SNAPSHOTDATE)
     )
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
+    FIRSTNAME VARCHAR(100) NOT NULL,
     SALARY INTEGER,
-    FIRMID INTEGER,
-    SNAPSHOTDATE DATE
+    FIRMID INTEGER NOT NULL,
+    SNAPSHOTDATE DATE NOT NULL
   )
 
   Table PERSON_TABLE_BUSINESS_SNAPSHOT
@@ -75,10 +103,10 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_SNAPSHOT_DATE = SNAPSHOTDATE)
     )
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
+    FIRSTNAME VARCHAR(100) NOT NULL,
     SALARY INTEGER,
-    FIRMID INTEGER,
-    SNAPSHOTDATE DATE
+    FIRMID INTEGER NOT NULL,
+    SNAPSHOTDATE DATE NOT NULL
   )
 
   Table PERSON_TABLE_PROCESSING_TEMPORAL
@@ -88,11 +116,11 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       processing(PROCESSING_IN = IN_Z, PROCESSING_OUT = OUT_Z)
     )
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
+    FIRSTNAME VARCHAR(100) NOT NULL,
     SALARY INTEGER,
-    FIRMID INTEGER,
-    IN_Z DATE,
-    OUT_Z DATE
+    FIRMID INTEGER NOT NULL,
+    IN_Z DATE NOT NULL,
+    OUT_Z DATE NOT NULL
   )
 
   Table PERSON_TABLE_BUSINESS_TEMPORAL
@@ -102,11 +130,11 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_FROM = FROM_Z, BUS_THRU = THRU_Z)
     )
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
+    FIRSTNAME VARCHAR(100) NOT NULL,
     SALARY INTEGER,
-    FIRMID INTEGER,
-    FROM_Z DATE,
-    THRU_Z DATE
+    FIRMID INTEGER NOT NULL,
+    FROM_Z DATE NOT NULL,
+    THRU_Z DATE NOT NULL
   )
 
   Table PERSON_TABLE_BITEMPORAL
@@ -117,13 +145,13 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_FROM = FROM_Z, BUS_THRU = THRU_Z)
     )
     ID INTEGER PRIMARY KEY,
-    FIRSTNAME VARCHAR(100),
+    FIRSTNAME VARCHAR(100) NOT NULL,
     SALARY INTEGER,
-    FIRMID INTEGER,
-    IN_Z DATE,
-    OUT_Z DATE,
-    FROM_Z DATE,
-    THRU_Z DATE
+    FIRMID INTEGER NOT NULL,
+    IN_Z DATE NOT NULL,
+    OUT_Z DATE NOT NULL,
+    FROM_Z DATE NOT NULL,
+    THRU_Z DATE NOT NULL
   )
 
   Table FIRM_TABLE_PROCESSING_SNAPSHOT
@@ -133,8 +161,8 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       processing(PROCESSING_SNAPSHOT_DATE = SNAPSHOTDATE)
     )
     ID INTEGER PRIMARY KEY,
-    LEGALNAME VARCHAR(100),
-    SNAPSHOTDATE DATE
+    LEGALNAME VARCHAR(100) NOT NULL,
+    SNAPSHOTDATE DATE NOT NULL
   )
 
   Table FIRM_TABLE_BUSINESS_SNAPSHOT
@@ -144,8 +172,8 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_SNAPSHOT_DATE = SNAPSHOTDATE)
     )
     ID INTEGER PRIMARY KEY,
-    LEGALNAME VARCHAR(100),
-    SNAPSHOTDATE DATE
+    LEGALNAME VARCHAR(100) NOT NULL,
+    SNAPSHOTDATE DATE NOT NULL
   )
 
   Table FIRM_TABLE_PROCESSING_TEMPORAL
@@ -155,9 +183,9 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       processing(PROCESSING_IN = IN_Z, PROCESSING_OUT = OUT_Z)
     )
     ID INTEGER PRIMARY KEY,
-    LEGALNAME VARCHAR(100),
-    IN_Z DATE,
-    OUT_Z DATE
+    LEGALNAME VARCHAR(100) NOT NULL,
+    IN_Z DATE NOT NULL,
+    OUT_Z DATE NOT NULL
   )
 
   Table FIRM_TABLE_BUSINESS_TEMPORAL
@@ -167,9 +195,9 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_FROM = FROM_Z, BUS_THRU = THRU_Z)
     )
     ID INTEGER PRIMARY KEY,
-    LEGALNAME VARCHAR(100),
-    FROM_Z DATE,
-    THRU_Z DATE
+    LEGALNAME VARCHAR(100) NOT NULL,
+    FROM_Z DATE NOT NULL,
+    THRU_Z DATE NOT NULL
   )
 
   Table FIRM_TABLE_BITEMPORAL
@@ -180,15 +208,15 @@ Database meta::relational::tests::mapping::relation::MilestonedDB
       business(BUS_FROM = FROM_Z, BUS_THRU = THRU_Z)
     )
     ID INTEGER PRIMARY KEY,
-    LEGALNAME VARCHAR(100),
-    IN_Z DATE,
-    OUT_Z DATE,
-    FROM_Z DATE,
-    THRU_Z DATE,
-    SNAPSHOTDATE DATE
+    LEGALNAME VARCHAR(100) NOT NULL,
+    IN_Z DATE NOT NULL,
+    OUT_Z DATE NOT NULL,
+    FROM_Z DATE NOT NULL,
+    THRU_Z DATE NOT NULL,
+    SNAPSHOTDATE DATE NOT NULL
   )
 )
- 
+
 ###Pure
 Class meta::relational::tests::mapping::relation::Person
 {
@@ -226,10 +254,47 @@ Class meta::relational::tests::mapping::relation::ExtendedPerson extends meta::r
   groupName: String[1];
 }
 
+// Demonstrates the nullable-column → [0..1]-property mapping path.
+// `salary` is Float[0..1] and the underlying column SALARY is the only
+// nullable column in personTable, so the multiplicities line up exactly.
+Class meta::relational::tests::mapping::relation::PersonWithOptionalSalary extends meta::relational::tests::mapping::relation::Person
+{
+  salary: Float[0..1];
+}
+
+// --- Classes for RFPM-lift variant tests ---------------------------------------
+// These exercise the processRelationFunctionPropertyMapping router, which evaluates
+// each PM's `valueFn` lambda body against the materialised RF cursor and synthesises
+// the appropriate wrapper (RelationalPropertyMapping /
+// SemiStructuredRelationalPropertyMapping /
+// SemiStructuredEmbeddedRelationalInstanceSetImplementation).
+
+// Non-variant DynaFunction case: string concat over two regular columns.
+// Exercises the lift router's RelationalPropertyMapping (non-SS) wrapper path.
+Class meta::relational::tests::mapping::relation::PersonLiftedConcat
+{
+  greeting: String[1];
+}
+
+// Type-rejection case: `attributes` is Map<String,Variant>[1], a
+// structural container that the router must reject at plan time. Map is a
+// Class instance (passes instanceOf(Class)) but is explicitly excluded by
+// the isStructuralContainer check at pureToSQLQuery.pure:1944.
+Class meta::relational::tests::mapping::relation::PersonLiftedUnsupported
+{
+  attributes: meta::pure::functions::collection::Map<String, meta::pure::metamodel::variant::Variant>[1];
+}
+
 Class <<temporal.businesstemporal>> meta::relational::tests::mapping::relation::GroupByClass
 {
   firmId: Integer[1];
   sum: Integer[1];
+}
+
+Association meta::relational::tests::mapping::relation::GroupByClass_Firm
+{
+  groupedByFirm: meta::relational::tests::mapping::relation::Firm[1];
+  firmGroupings: meta::relational::tests::mapping::relation::GroupByClass[*];
 }
 
 Class meta::relational::tests::mapping::relation::Firm
@@ -339,8 +404,19 @@ Association meta::relational::tests::mapping::relation::Person_Group
   group: meta::relational::tests::mapping::relation::Group[1];
 }
 
+Class meta::relational::tests::mapping::relation::Trade
+{
+   id: Integer[1];
+   quantity: Float[1];
+   date: StrictDate[1];
+   settlementDateTime: DateTime[0..1];
+}
+
 ###Mapping
+import meta::pure::functions::variant::convert::*;
 import meta::relational::tests::mapping::relation::*;
+import meta::pure::functions::variant::navigation::*;
+
 Mapping meta::relational::tests::mapping::relation::SimpleMapping
 (
   *Person[person]: Relation
@@ -365,6 +441,70 @@ Mapping meta::relational::tests::mapping::relation::SimpleMapping
   }
 )
 
+// Same shape as SimpleMapping, but every property mapping is written in
+// the explicit `$src.<col>` form rather than the bare-column sugar.
+// Exercises the lambda-body code path for the trivial single-column case
+// and asserts equivalence with the bare form.
+Mapping meta::relational::tests::mapping::relation::ExplicitSrcMapping
+(
+  *Person[person]: Relation
+  {
+    ~func meta::relational::tests::mapping::relation::personFunction__Relation_1_
+    firstName: $src.'FIRST NAME',
+    age: $src.AGE,
+    +firmId: Integer[1]: $src.FIRMID
+  }
+
+  *Firm[firm]: Relation
+  {
+    ~func meta::relational::tests::mapping::relation::firmFunction__Relation_1_
+    legalName: $src.legalName,
+    +id: Integer[1]: $src.ID
+  }
+
+  Person_Firm: XStore
+  {
+    employees[firm, person]: $this.id == $that.firmId,
+    firm[person, firm]: $this.firmId == $that.id
+  }
+)
+
+// Uses a Pure expression (arithmetic) on the property RHS.
+Mapping meta::relational::tests::mapping::relation::ExpressionMapping
+(
+  *Person[person]: Relation
+  {
+    ~func meta::relational::tests::mapping::relation::personFunction__Relation_1_
+    firstName: $src.'FIRST NAME',
+    age: $src.AGE + 5,
+    +firmId: Integer[1]: $src.FIRMID
+  }
+)
+
+// Demonstrates the [0..1]-column → [0..1]-property mapping path under the
+// strict multiplicity check.
+Mapping meta::relational::tests::mapping::relation::NullableSalaryMapping
+(
+  *PersonWithOptionalSalary[personWithSalary]: Relation
+  {
+    ~func meta::relational::tests::mapping::relation::personFunction__Relation_1_
+    firstName: 'FIRST NAME',
+    age: AGE,
+    salary: SALARY
+  }
+)
+
+// Non-variant DynaFunction (string concat). Lift detects no variants,
+// synthesises RelationalPropertyMapping with the concat relop. Runs on H2.
+Mapping meta::relational::tests::mapping::relation::LiftedConcatMapping
+(
+  *PersonLiftedConcat[personLiftedConcat]: Relation
+  {
+    ~src meta::relational::tests::mapping::relation::personFunctionTyped()
+    greeting: 'Hello ' + $src.'FIRST NAME'
+  }
+)
+
 Mapping meta::relational::tests::mapping::relation::MixedMapping
 (
   *Person[person]: Relation
@@ -382,7 +522,7 @@ Mapping meta::relational::tests::mapping::relation::MixedMapping
     firmId: [meta::relational::tests::mapping::relation::testDB]personTable.FIRMID
   }
 
-  *Firm[firm]: Relational 
+  *Firm[firm]: Relational
   {
     +id: Integer[1]: [meta::relational::tests::mapping::relation::testDB]firmTable.ID,
     legalName: [meta::relational::tests::mapping::relation::testDB]firmTable.legalName
@@ -447,7 +587,7 @@ Mapping meta::relational::tests::mapping::relation::SnapshotMilestonedMapping
     +id: Integer[1]: ID
   }
 
-  *BusinessTemporalFirm[biztFirm]: Relation 
+  *BusinessTemporalFirm[biztFirm]: Relation
   {
     ~func meta::relational::tests::mapping::relation::firmFunctionWithBusinessSnapshotMilestoning():Relation<Any>[1]
     legalName: LEGALNAME,
@@ -480,7 +620,7 @@ Mapping meta::relational::tests::mapping::relation::MixedTemporalMilestonedMappi
     firmId: [meta::relational::tests::mapping::relation::MilestonedDB]PERSON_TABLE_BUSINESS_TEMPORAL.FIRMID
   }
 
-  *BusinessTemporalFirm[biztFirm]: Relation 
+  *BusinessTemporalFirm[biztFirm]: Relation
   {
     ~func meta::relational::tests::mapping::relation::firmFunctionWithBusinessTemporalMilestoning():Relation<Any>[1]
     legalName: LEGALNAME,
@@ -744,6 +884,108 @@ Mapping meta::relational::tests::mapping::relation::MixedCaseAssociationChainMap
     employees[firm, person]: $this.id == $that.firmId,
     firm[person, firm]:      $this.firmId == $that.id
   }
+
+  // Person_Firm: ModelJoin
+  // {
+  //   {employees:Person[1], firm:Firm[1]|$firm.id == $employees.firmId}
+  // }
+)
+
+Mapping meta::relational::tests::mapping::relation::tradeRelationMapping
+(
+   *Trade: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::tradeFunction__Relation_1_
+      id: ID,
+      quantity: quantity,
+      date: tradeDate,
+      settlementDateTime: settlementDateTime
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::filterJoinMapping
+(
+   *Person: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::personFunctionWithJoinFilter__Relation_1_
+      firstName: 'FIRST NAME',
+      age: AGE
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::distinctFirmMapping
+(
+   *Firm: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::distinctFirmFunc__Relation_1_
+      legalName: LEGALNAME,
+      +id: Integer[1]: ID
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::GroupByAssociationMapping
+(
+   *GroupByClass[groupByClass]: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::personFunctionWithGroupBy__Relation_1_
+      firmId: FIRMID,
+      sum: SUM
+   }
+
+   *Firm[firm]: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::firmFunction__Relation_1_
+      legalName: legalName,
+      +id: Integer[1]: ID
+   }
+
+   GroupByClass_Firm: ModelJoin
+   {
+      {firmGroupings: GroupByClass[1], groupedByFirm: Firm[1] | $firmGroupings.firmId == $groupedByFirm.id}
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::distinctFirmJoinMapping
+(
+   *Person[person]: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::personAllFunc__Relation_1_
+      firstName: 'FIRST NAME',
+      age: AGE,
+      +firmId: Integer[1]: FIRMID
+   }
+
+   *Firm[firm]: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::distinctFirmFunc__Relation_1_
+      legalName: LEGALNAME,
+      +id: Integer[1]: ID
+   }
+
+   Person_Firm: ModelJoin
+   {
+      {employees: Person[1], firm: Firm[1] | $firm.id == $employees.firmId}
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::distinctFirmFilteredMapping
+(
+   *Firm: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::distinctFirmFilteredFunc__Relation_1_
+      legalName: LEGALNAME,
+      +id: Integer[1]: ID
+   }
+)
+
+Mapping meta::relational::tests::mapping::relation::distinctFirmCaseMapping
+(
+   *Firm: Relation
+   {
+      ~func meta::relational::tests::mapping::relation::firmWithCaseFunc__Relation_1_
+      legalName: name,
+      +id: Integer[1]: ID
+   }
 )
 
 ###Pure
@@ -755,6 +997,13 @@ import meta::pure::metamodel::relation::*;
 import meta::relational::tests::mapping::relation::*;
 
 function meta::relational::tests::mapping::relation::personFunction(): Relation<Any>[1]
+{
+  #>{meta::relational::tests::mapping::relation::testDB.personTable}#
+    ->filter(x | $x.AGE > 25)
+    ->limit(5)
+}
+
+function meta::relational::tests::mapping::relation::personFunctionTyped(): Relation<(ID:Integer, 'FIRST NAME':String, AGE:Integer, FIRMID:Integer, EMPLOYEE_TYPE:String, IS_MALE:Integer, SALARY:Float)>[1]
 {
   #>{meta::relational::tests::mapping::relation::testDB.personTable}#
     ->filter(x | $x.AGE > 25)
@@ -824,6 +1073,13 @@ function meta::relational::tests::mapping::relation::personFunctionWithBiTempora
   #>{meta::relational::tests::mapping::relation::MilestonedDB.PERSON_TABLE_BITEMPORAL}#->select(~[FIRSTNAME, SALARY, FIRMID]);
 }
 
+// Source for the RFPM-lift variant tests: yields rows with (ID, PAYLOAD)
+// where PAYLOAD is a Variant-typed (SEMISTRUCTURED) column holding JSON.
+function meta::relational::tests::mapping::relation::personWithPayloadFunction(): meta::pure::metamodel::relation::Relation<Any>[1]
+{
+  #>{meta::relational::tests::mapping::relation::testDB.personPayloadTable}#->select(~[ID, PAYLOAD]);
+}
+
 function meta::relational::tests::mapping::relation::firmFunctionWithProcessingSnapshotMilestoning():meta::pure::metamodel::relation::Relation<Any>[1]
 {
   #>{meta::relational::tests::mapping::relation::MilestonedDB.FIRM_TABLE_PROCESSING_SNAPSHOT}#->select(~[ID, LEGALNAME]);
@@ -876,6 +1132,62 @@ function meta::relational::tests::mapping::relation::personFunctionWithAddress()
 {
   #>{meta::relational::tests::mapping::relation::testDB.personWithAddressTable}#
     ->select(~[FIRSTNAME, AGE, STREET, CITY, FIRMID])
+}
+
+function meta::relational::tests::mapping::relation::tradeFunction():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.tradeTable}#
+      ->select(~[ID, tradeDate, quantity, settlementDateTime]);
+}
+
+function meta::relational::tests::mapping::relation::personFunctionWithJoinFilter():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.personTable}#
+      ->join(#>{meta::relational::tests::mapping::relation::testDB.groupMembershipTable}#, JoinKind.INNER, {p, g | $p.ID == $g.PERSONID})
+      ->filter(x | $x.GROUPNAME == 'Group C')
+      ->select(~['FIRST NAME', AGE]);
+}
+
+function meta::relational::tests::mapping::relation::distinctFirmFunc():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.distinctFirmTable}#
+      ->select(~[ID, LEGALNAME])
+      ->distinct();
+}
+
+// Helper for the RFPM-lift variant tests.
+// Each test calls this with its own scenario-specific CSV; setUpDataSQLsV2
+// generates DROP+CREATE+INSERT against personPayloadTable (declared in testDB
+// but NOT seeded by createTablesAndFillDb — variant payloads are per-test).
+function meta::relational::tests::mapping::relation::setupRfpmLiftTestData(csvs: String[*], db: Database[1], runtime: meta::core::runtime::Runtime[1]):Boolean[1]
+{
+  let connection = $runtime.connectionByElement($db)->cast(@meta::external::store::relational::runtime::TestDatabaseConnection);
+  let dbConfig = meta::relational::functions::sqlQueryToString::createDbConfig($connection.type);
+  let sqls = $csvs->joinStrings('\n-\n')->meta::alloy::service::execution::setUpDataSQLsV2($db, $dbConfig);
+  $sqls->map(sql | meta::relational::metamodel::execute::executeInDb($sql, $connection));
+  true;
+}
+
+function meta::relational::tests::mapping::relation::distinctFirmFilteredFunc():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.distinctFirmTable}#
+      ->filter(x | $x.ID <= 2)
+      ->select(~[ID, LEGALNAME])
+      ->distinct();
+}
+
+function meta::relational::tests::mapping::relation::firmWithCaseFunc():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.distinctFirmTable}#
+      ->extend(~name:r | if($r.ID == 1, | 'Primary Firm', | $r.LEGALNAME->toOne()))
+      ->select(~[ID, name])
+      ->distinct();
+}
+
+function meta::relational::tests::mapping::relation::personAllFunc():Relation<Any>[1]
+{
+   #>{meta::relational::tests::mapping::relation::testDB.personTable}#
+      ->select(~['FIRST NAME', AGE, FIRMID]);
 }
 
 function <<meta::pure::profiles::test.BeforePackage>> meta::relational::tests::mapping::relation::setUp():Boolean[1]
@@ -941,7 +1253,7 @@ function meta::relational::tests::mapping::relation::createTablesAndFillDb():Boo
   executeInDb('insert into PERSON_TABLE_BUSINESS_SNAPSHOT(ID, FIRSTNAME, SALARY, FIRMID, SNAPSHOTDATE) values (5, \'Fabrice\', 45,  4, \'2023-11-01\');', $connection);
   executeInDb('insert into PERSON_TABLE_BUSINESS_SNAPSHOT(ID, FIRSTNAME, SALARY, FIRMID, SNAPSHOTDATE) values (6, \'Oliver\',  26,  4, \'2024-01-01\');', $connection);
   executeInDb('insert into PERSON_TABLE_BUSINESS_SNAPSHOT(ID, FIRSTNAME, SALARY, FIRMID, SNAPSHOTDATE) values (7, \'David\',   52,  5, \'2025-01-01\');', $connection);
-  
+
   executeInDb('Drop table if exists FIRM_TABLE_PROCESSING_SNAPSHOT;', $connection);
   executeInDb('Create Table FIRM_TABLE_PROCESSING_SNAPSHOT(ID INT, LEGALNAME VARCHAR(200), SNAPSHOTDATE DATE);', $connection);
   executeInDb('insert into FIRM_TABLE_PROCESSING_SNAPSHOT(ID, LEGALNAME, SNAPSHOTDATE) values (1, \'Firm X\', \'2025-01-01\');', $connection);
@@ -1011,6 +1323,32 @@ function meta::relational::tests::mapping::relation::createTablesAndFillDb():Boo
   executeInDb('insert into FIRM_TABLE_BITEMPORAL(ID, LEGALNAME, IN_Z, OUT_Z, FROM_Z, THRU_Z) values (3, \'Firm B\', \'2024-11-01\', \'2025-01-01\', \'2024-11-01\', \'2025-01-01\');', $connection);
   executeInDb('insert into FIRM_TABLE_BITEMPORAL(ID, LEGALNAME, IN_Z, OUT_Z, FROM_Z, THRU_Z) values (4, \'Firm C\', \'2024-11-01\', \'2024-12-31\', \'2024-11-01\', \'2024-12-31\');', $connection);
   executeInDb('insert into FIRM_TABLE_BITEMPORAL(ID, LEGALNAME, IN_Z, OUT_Z, FROM_Z, THRU_Z) values (5, \'Firm D\', \'2024-11-01\', \'2025-01-01\', \'2024-11-01\', \'2025-01-01\');', $connection);
+
+  executeInDb('Drop table if exists tradeTable;', $connection);
+  executeInDb('Create Table tradeTable(ID INT PRIMARY KEY, quantity FLOAT NOT NULL, tradeDate DATE NOT NULL, settlementDateTime TIMESTAMP(9));', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (1, 25, \'2014-12-01\', \'2014-12-02 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (2, 320, \'2014-12-01\', \'2014-12-02 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (3, 11, \'2014-12-01\', \'2014-12-02 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (4, 23, \'2014-12-02\', \'2014-12-03 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (5, 32, \'2014-12-02\', \'2014-12-03 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (6, 27, \'2014-12-03\', \'2014-12-04 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (7, 44, \'2014-12-03\', \'2014-12-04 15:22:23.123\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (8, 22, \'2014-12-04\', \'2014-12-05 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (9, 45, \'2014-12-04\', \'2014-12-05 21:00:00\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate) values (10, 38, \'2014-12-04\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate) values (11, 5, \'2014-12-05\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (12, 45, \'2016-02-04\', \'2016-02-05T21:00:00.123456789\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (13, 45, \'2016-03-28\', \'2016-03-29T21:00:00.123456789\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (14, 45, \'2016-03-28\', \'2016-03-29 21:00:00.123456789\');', $connection);
+  executeInDb('insert into tradeTable (ID, quantity, tradeDate, settlementDateTime) values (15, 45, \'2016-02-14\', \'2016-02-15T21:00:00.123456789\');', $connection);
+
+  executeInDb('Drop table if exists distinctFirmTable;', $connection);
+  executeInDb('Create Table distinctFirmTable(ID INT, LEGALNAME VARCHAR(100));', $connection);
+  executeInDb('insert into distinctFirmTable (ID, LEGALNAME) values (1, \'Firm X\');', $connection);
+  executeInDb('insert into distinctFirmTable (ID, LEGALNAME) values (1, \'Firm X\');', $connection);
+  executeInDb('insert into distinctFirmTable (ID, LEGALNAME) values (2, \'Firm A\');', $connection);
+  executeInDb('insert into distinctFirmTable (ID, LEGALNAME) values (2, \'Firm A\');', $connection);
+  executeInDb('insert into distinctFirmTable (ID, LEGALNAME) values (3, \'Firm B\');', $connection);
 
   true;
 }
