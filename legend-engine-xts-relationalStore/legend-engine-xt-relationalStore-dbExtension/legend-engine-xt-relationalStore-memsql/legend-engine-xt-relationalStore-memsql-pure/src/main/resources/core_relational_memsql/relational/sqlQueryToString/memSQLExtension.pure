@@ -25,7 +25,9 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::memsq
      getDynaFunctionToSqlForMemSQL()->groupBy(d| $d.funcName))->getDynaFunctionDispatcher();
 
    ^DbExtension(
-      isBooleanLiteralSupported = true,
+      // MySQL has no boolean type - TRUE/FALSE are just 1/0 - so a boolean is never a value here,
+      // only a predicate. Booleans are wrapped as comparisons and projected through a case.
+      isBooleanLiteralSupported = false,
       collectionThresholdLimit = 1048576,
       extraTempTableCreationLogicSupplierForIn = {varName:String[1] | 'instanceOf(' + $varName + ', "StreamingResult")'},
       isDbReservedIdentifier = {str:String[1]| $str->in($reservedWords)},
@@ -44,6 +46,23 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::memsq
       pureTypeToDatabaseTypeConverter = convert_GenericType_1__DataType_1_,
       buildDummyConnection = buildDummyConnection__RelationalDatabaseConnection_1_
    );
+}
+
+// as processSelectColumns, but quotes the case-wrapped alias with the dialect identifier
+// processor - MemSQL uses backticks, and the shared version emits the raw alias
+function <<access.private>> meta::relational::functions::sqlQueryToString::memsql::processSelectColumnsMemSQL(s:RelationalOperationElement[*], dbConfig : DbConfig[1], format:Format[1], config:Config[1], separator:String[1], conditionalExprAllowed:Boolean[1], extensions:Extension[*]):String[1]
+{
+  if ($s->size() == 0,
+         |'*',
+         | $format.separator + $s->map(r| $r->match([a:Alias[1] | let shouldWrapWithCase = ($a.relationalElement->isBooleanOperation($extensions) && !$conditionalExprAllowed);
+
+                                                                 $shouldWrapWithCase->if(|'case when (' + $a.relationalElement->processOperation($dbConfig, $format, ^GenerationState(generationSide = GenerationSide.Select, withinWhenClause = true), $config, $extensions) + ') then \'true\' else \'false\' end as ' + $dbConfig.identifierProcessor($a.name),
+                                                                                         | $r->processOperation($dbConfig, $format, ^GenerationState(generationSide = GenerationSide.Select, withinWhenClause = false), $config, $extensions)
+                                                                                         );,
+                                                     z:RelationalOperationElement[1] | $z->processOperation($dbConfig, $format, ^GenerationState(generationSide = GenerationSide.Select, withinWhenClause = false), $config, $extensions)
+                                                     ])
+                                      )->joinStrings($separator + $format.separator);
+  );
 }
 
 function <<access.private>> meta::relational::functions::sqlQueryToString::memsql::memSQLReservedWords():String[*]
@@ -86,6 +105,8 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::memsq
     dynaFnToSql('boolor',                    $allStates,            ^ToSql(format='max(%s)')),
     dynaFnToSql('char',                      $allStates,            ^ToSql(format='cast(char(%s) as char)')),
     dynaFnToSql('concat',                    $allStates,            ^ToSql(format='concat%s', transform={p:String[*]|$p->joinStrings('(', ', ', ')')})),
+    dynaFnToSql('nullSafeEqual',          $allStates,            ^ToSql(format='%s <=> %s')),
+    dynaFnToSql('nullSafeNotEqual',       $allStates,            ^ToSql(format='not (%s <=> %s)')),
     dynaFnToSql('convertDate',               $allStates,            ^ToSql(format='%s', transform={p:String[*] | $p->convertToDateMemSQL()})),
     dynaFnToSql('convertVarchar128',         $allStates,            ^ToSql(format='convert(%s, CHAR)')),
     dynaFnToSql('dateDiff',                  $allStates,            ^ToSql(format='%s', transform={p:String[*]|generateDateDiffExpressionForMemSQL ([$p->at(0), $p->at(1), $p->at(2)->replace('\'', '')])})),
@@ -344,7 +365,7 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::memsq
   let joinOrder = [JoinType.INNER, JoinType.LEFT_OUTER, JoinType.RIGHT_OUTER];
 
   $format.separator + 'select ' + if($s.distinct == true,|'distinct ',|'') +
-  processSelectColumns($s.columns, $dbConfig, $format->indent(), true, $extensions) +
+  processSelectColumnsMemSQL($s.columns, $dbConfig, $format->indent(), ^Config(), ', ', $dbConfig.dbExtension.isBooleanLiteralSupported, $extensions) +
   if ($s.data == [],
     |'',
     | let fromStr = $s.data->toOne()->processJoinTreeNode([], $dbConfig, $format->indent(), $joinOrder, $extensions);
@@ -421,6 +442,9 @@ function meta::relational::functions::sqlQueryToString::memsql::getColumnTypeSql
 {
    $columnType->match([
       s : meta::relational::metamodel::datatype::Json[1] | 'JSON',
+      u : meta::relational::metamodel::datatype::UnsignedBigInt[1] | 'BIGINT UNSIGNED',
+      u : meta::relational::metamodel::datatype::UnsignedInt[1] | 'INT UNSIGNED',
+      u : meta::relational::metamodel::datatype::UnsignedTinyInt[1] | 'TINYINT UNSIGNED',
       a : Any[*] | meta::relational::metamodel::datatype::dataTypeToSqlText($columnType)
    ])
 }
@@ -476,6 +500,9 @@ function meta::relational::functions::sqlQueryToString::memsql::convert(genericT
             pair(|$path == 'SmallInt', |^meta::relational::metamodel::datatype::SmallInt()),
             pair(|$path == 'Timestamp', |^meta::relational::metamodel::datatype::Timestamp()),
             pair(|$path == 'TinyInt', |^meta::relational::metamodel::datatype::TinyInt()),
+            pair(|$path == 'UBigInt', |^meta::relational::metamodel::datatype::UnsignedBigInt()),
+            pair(|$path == 'UInt', |^meta::relational::metamodel::datatype::UnsignedInt()),
+            pair(|$path == 'UTinyInt', |^meta::relational::metamodel::datatype::UnsignedTinyInt()),
             pair(|$path == 'Varchar', |^meta::relational::metamodel::datatype::Varchar(size=$variables->cast(@InstanceValue)->evaluateAndDeactivate().values->toOne()->cast(@Integer))),
             pair(|$path == 'Variant', |^meta::relational::metamodel::datatype::Json())
         ],

@@ -1,4 +1,4 @@
-//  Copyright 2022 Goldman Sachs
+//  Copyright 2026 Goldman Sachs
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -12,9 +12,19 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-package org.finos.legend.engine.shared.core.api.grammar;
+package org.finos.legend.engine.protocol.pure.v1.model.packageableElement.dataSpace;
 
-public class Parser
+import org.finos.legend.engine.protocol.pure.m3.SourceInformation;
+import org.finos.legend.engine.protocol.pure.v1.model.context.PackageableElementPointer;
+
+import java.util.Collections;
+import java.util.List;
+
+public class DataSpaceMappingProvider
 {
-
+    public PackageableElementPointer element;
+    public List<String> keys = Collections.emptyList();
+    public SourceInformation sourceInformation;
 }
+
+
