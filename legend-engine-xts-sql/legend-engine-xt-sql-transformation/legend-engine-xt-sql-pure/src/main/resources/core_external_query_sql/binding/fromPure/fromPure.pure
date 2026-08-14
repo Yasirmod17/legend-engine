@@ -230,9 +230,14 @@ function meta::external::query::sql::transformation::queryToPure::sqlToPure(quer
 function meta::external::query::sql::transformation::queryToPure::getLambdaCompiler(compiler:Function<{String[1]->LambdaFunction<Any>[1]}>[1]):Function<{LambdaFunction<Any>[1]->LambdaFunction<Any>[1]}>[1]
 {
   {l:LambdaFunction<Any>[1]| 
-    let code = $l->removeFrom()->printFunctionDefinition(meta::external::query::sql::transformation::queryToPure::dynamicGrammarConfiguration(), ^GContext(space=''));
+    let code = $l->removeFrom()->printLambdaDefinition();
     $compiler->eval($code);
   }
+}
+
+function meta::external::query::sql::transformation::queryToPure::printLambdaDefinition(l:LambdaFunction<Any>[1]):String[1]
+{
+  $l->printFunctionDefinition(meta::external::query::sql::transformation::queryToPure::dynamicGrammarConfiguration(), ^GContext(space=''))
 }
 
 function meta::external::query::sql::transformation::queryToPure::sqlToPure(query:Query[1], sources:SQLSource[*], extraPackages:PackageableElement[*], scopeVariables:Map<String, ValueSpecification>[1], preval:Boolean[1], compiler:Function<{LambdaFunction<Any>[1]->LambdaFunction<Any>[1]}>[1]):Function<Any>[1]
@@ -4563,7 +4568,7 @@ Class meta::external::query::sql::transformation::queryToPure::TDSBuilder
     if ($distinct,
       | if ($relation,
           | createToOne(sfe(union_T_MANY__T_MANY__T_MANY_, buildRelationType($context.columns), $args)),
-          | createToOne(sfe(union_T_MANY__T_MANY__T_MANY_, $args))),
+          | createToOne(sfe(union_T_MANY__T_MANY__T_MANY_, ^GenericType(rawType = TabularDataSet), ^GenericType(rawType = TabularDataSet), $args))),
       | if ($relation,
           | sfe(concatenate_Relation_1__Relation_1__Relation_1_, buildRelationType($context.columns), $args),
           | sfe(concatenate_TabularDataSet_1__TabularDataSet_1__TabularDataSet_1_, $args)));
