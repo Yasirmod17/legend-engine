@@ -123,6 +123,7 @@ all backends. See [Testing Strategy — PCT](testing/testing-strategy.md#5-pct-p
 | [Contributor Workflow](guides/contributor-workflow.md) | How to add a grammar section, store extension, or function activator |
 | [Exploration & Discovery](guides/exploration.md) | Systematic approach for new engineers exploring the codebase |
 | [Pure IDE Delta-Compiler Debugging](guides/pure-ide-delta-compiler-debugging.md) | Driving the Pure IDE over HTTP to delta-compile and run `.pure` code in seconds instead of a full Maven rebuild |
+| [SQL E2E Parity Suite](../../legend-engine-xts-sql/legend-engine-xt-sql-e2e-tests/README.md) | Running the SQL e2e parity corpus, compiled and interpreted; baseline statuses, the traps that waste time, known-unsupported areas, and how the interpreted dev loop is built. Lives with the suite. |
 | [Identity, Authentication & Traceability](guides/identity-authentication-guide.md) | Identity model, credential types, authentication flows, vault integration, end-to-end traceability |
 | [Logging, Tracing & Observability](guides/logging-tracing-observability.md) | Structured logging with `LogInfo`, OpenTracing, OpenTelemetry, Prometheus metrics |
 
@@ -143,6 +144,7 @@ all backends. See [Testing Strategy — PCT](testing/testing-strategy.md#5-pct-p
 | [Module Reference](reference/modules.md) | Every module group and sub-module with entry-point classes — look up any module here |
 | [Technology Stack](reference/tech-stack.md) | Third-party library catalogue: versions, rationale, upgrade instructions |
 | [TDS & Relation Function Reference](reference/tds-and-relation.md) | Complete function catalogue for `TabularDataSet` and `Relation<T>` APIs |
+| [Boolean Predicate Emission](reference/boolean-predicate-emission.md) | How dialects without a boolean literal coerce predicates and values, per-dialect emission table, known defects, and the dialects deliberately left alone |
 | [Module README Template](templates/module-readme-template.md) | Standard template for per-module README files |
 
 ---

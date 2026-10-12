@@ -119,7 +119,7 @@ function meta::relational::functions::pureToSqlQuery::isAutomapWithVariantInput(
 // RelationFunctionPropertyMapping lift router (processRelationFunctionPropertyMapping)
 // to decide whether to wrap the synthesised property mapping as semi-structured.
 // Walks the head spine first via isVariantInputWithInstanceValue (covers most cases:
-// `$src.payload->...`, `arr->filter(...)`, `arr->size()`, etc.), then recurses into
+// `$row.payload->...`, `arr->filter(...)`, `arr->size()`, etc.), then recurses into
 // all parametersValues and routed-value-spec wrappers for completeness (covers
 // non-head-spine variants e.g. `if($cond, $variantA, $variantB)`).
 function meta::relational::functions::pureToSqlQuery::expressionTouchesVariant(v:ValueSpecification[1], state:State[1]):Boolean[1]
@@ -1014,10 +1014,8 @@ function meta::relational::functions::pureToSqlQuery::isArrayValuedRelationalOpe
 
 function <<access.private>> meta::relational::functions::pureToSqlQuery::returnsCollection(dynaFunctionName:String[1]):Boolean[1]
 {
-  let entry = meta::relational::functions::sqlQueryToString::DynaFunctionRegistry->enumValues()
-                ->filter(e | $e.name == $dynaFunctionName);
-  $entry->isNotEmpty()
-    && $entry->toOne()->hasStereotype('collection', meta::relational::functions::sqlQueryToString::DynaFunctionReturn);
+  meta::relational::functions::sqlQueryToString::DynaFunctionRegistry->extractEnumValue($dynaFunctionName)
+     ->hasStereotype('collection', meta::relational::functions::sqlQueryToString::DynaFunctionReturn);
 }
 
 // Builds the lateral flatten that turns an array-valued expression into one row per element:

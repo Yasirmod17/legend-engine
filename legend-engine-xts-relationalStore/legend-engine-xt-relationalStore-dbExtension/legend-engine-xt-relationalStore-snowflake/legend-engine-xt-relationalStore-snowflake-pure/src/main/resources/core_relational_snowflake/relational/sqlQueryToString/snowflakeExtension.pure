@@ -43,6 +43,7 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::snowf
 
    ^DbExtension(
       nullOrderingSupport = nullsHighWithClauseSupport(),
+      setOperationSupport = distinctOnlySetOperationSupport(),
       isBooleanLiteralSupported = true,
       collectionThresholdLimit = 16348,
       extraTempTableCreationLogicSupplierForIn = {varName:String[1] | 'instanceOf(' + $varName + ', "StreamingResult")'},
@@ -155,7 +156,12 @@ function meta::relational::functions::sqlQueryToString::snowflake::tabularFuncti
 
 function meta::relational::functions::sqlQueryToString::snowflake::tabularFunctionCallProcessor(schema:String[1], functionName:String[1], args:TabularFunctionCallArgument[*], sgc:SqlGenerationContext[1]):String[1]
 {
-   'table(' + meta::relational::functions::sqlQueryToString::default::tabularFunctionCallProcessor($schema, $functionName, $args, $sgc) + ')';
+   let renderedArgs = $args.value->map(v | $v->match([
+      ll:LiteralList[1] | 'ARRAY_CONSTRUCT(' + $ll.values->map(e | $e->processOperation($sgc))->joinStrings(', ') + ')',
+      r:RelationalOperationElement[1] | $r->processOperation($sgc)
+   ]))->joinStrings(', ');
+   let qualified = if($schema == '', | $functionName, | $schema + '.' + $functionName);
+   'table(' + $qualified + '(' + $renderedArgs + '))';
 }
 
 function meta::relational::functions::sqlQueryToString::snowflake::schemaIdentifierToString(identifier:String[1], dbConfig: DbConfig[1]):String[1]
@@ -364,7 +370,7 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::snowf
     // Typing an extraction as ARRAY(VARIANT) means a transform whose body extracts an array
     // produces ARRAY(ARRAY(VARIANT)), which ARRAY_FLATTEN refuses. Widening to a plain ARRAY
     // first is what it accepts, and the elements stay VARIANT either way.
-    dynaFnToSql('array_flatten',          $allStates,            ^ToSql(format='array_flatten(cast(%s as ARRAY))')),  
+    dynaFnToSql('array_flatten',          $allStates,            ^ToSql(format='array_flatten(cast(%s as ARRAY))')),
     dynaFnToSql('mapConcatenate',         $allStates,            ^ToSql(format='map_cat(%s, %s)')), 
     dynaFnToSql('parseBoolean',           $allStates,            ^ToSql(format='to_boolean(%s)')),
     dynaFnToSql('position',               $allStates,            ^ToSql(format='position(%s in %s)')),
@@ -599,7 +605,7 @@ function <<access.private>> meta::relational::functions::sqlQueryToString::snowf
    let processedOperand = $s.operand->processOperation($sgc);
 
    let elementAccess = $processedOperand + $s->match([
-      p: SemiStructuredPropertyAccess[1]     | '[\'' + $p.property->cast(@Literal).value->cast(@String) + '\']' + if($p.index->isEmpty(),|'',|'['+ $p.index->toOne()->cast(@Literal).value->toString()+']'),
+      p: SemiStructuredPropertyAccess[1]     | '[' + $p.property->processOperation($sgc) + ']' + if($p.index->isEmpty(),|'',|'['+ $p.index->toOne()->cast(@Literal).value->toString()+']'),
       a: SemiStructuredArrayElementAccess[1] | '[' + $a.index->cast(@Literal).value->toString() + ']'
    ]);
 
@@ -898,6 +904,7 @@ function meta::relational::functions::sqlQueryToString::snowflake::getColumnType
 {
     $type->match([
        s : meta::relational::metamodel::datatype::SemiStructured[1] | 'VARIANT',
+       b : meta::relational::metamodel::datatype::Bit[1] | 'BOOLEAN',
        a : meta::relational::metamodel::datatype::DataType[1] | $a->getColumnTypeSqlTextDefault()
     ]);
 }
